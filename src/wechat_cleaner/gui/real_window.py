@@ -1230,7 +1230,13 @@ class RealReadOnlyWindow(QMainWindow):
             candidates.append(record)
         return candidates, availability
 
-    def apply_filters(self) -> int:
+    def apply_filters(self, *, preserve_position: bool = False) -> int:
+        """Re-filter the grid; recycle/export passes preserve the viewport.
+
+        A user-driven filter change goes back to the top (newest first); a
+        re-render after files left the account keeps the scroll anchor so the
+        user stays where the action happened.
+        """
         candidates, availability = self._base_candidates()
         resolved = self._resolve_availability(candidates, availability)
         # Per-conversation shares under the current filter (session choice
@@ -1255,8 +1261,15 @@ class RealReadOnlyWindow(QMainWindow):
         total_bytes = sum(record.file.byte_size for record in selected)
         # The grid is virtualized, so the whole filtered set is handed to the
         # model; nothing is decoded until a cell scrolls into view.
+        saved_scroll: int | None = None
+        if preserve_position:
+            # Pixel scroll value, captured before the model reset: restoring it
+            # afterwards keeps the exact viewport (unlike scrollTo, whose item
+            # anchoring drifts on this wrapped grid).  Restored after the
+            # summary line below, whose height change is the last reflow.
+            saved_scroll = self.records_table.verticalScrollBar().value()
         self._records = tuple(selected)
-        self._render_grid()
+        self._render_grid(scroll_to_top=not preserve_position)
         self._update_filter_summary(resolved, stats)
         notes = ""
         if session_dir:
@@ -1268,6 +1281,10 @@ class RealReadOnlyWindow(QMainWindow):
             "（缩略图随滚动加载）。单击选中、Ctrl/Shift 多选后可批量管理。"
             f"{notes}{self._scan_seconds_note}"
         )
+        if saved_scroll is not None and self._grid_model.rowCount():
+            bar = self.records_table.verticalScrollBar()
+            self.records_table.doItemsLayout()
+            bar.setValue(min(saved_scroll, bar.maximum()))
         return len(self._records)
 
     def _update_filter_summary(
@@ -1412,6 +1429,16 @@ class RealReadOnlyWindow(QMainWindow):
         if interrupted:
             self._set_status("可用性检查已中止：连接已被关闭")
         return selected
+
+    def _on_batch_progress(self, done: int, total: int, action: str) -> None:
+        """Batch progress: 第X张/共Y张 plus a real percent bar (UI-thread slot)."""
+        self._busy_progress = f"{action}第 {done}/{total} 张"
+        self._progress_value(done * 100 // total if total else 100)
+        if self._busy_loop is not None:
+            elapsed = int(time.monotonic() - self._busy_started)
+            self._set_status(
+                f"{self._busy_message}｜{self._busy_progress}（已 {elapsed} 秒）"
+            )
 
     def _on_scan_progress(self, count: int) -> None:
         """Real scan progress: files discovered so far (UI-thread slot)."""
@@ -1595,12 +1622,17 @@ class RealReadOnlyWindow(QMainWindow):
             cached = self._availability[record.media_id] = self._facade.availability(record)
         return cached
 
-    def _render_grid(self) -> None:
+    def _render_grid(self, *, scroll_to_top: bool = True) -> None:
         """Hand the filtered records to the grid model and warm what is visible.
 
         The old table filled one widget row per record and had to cap the count
         at 2000 to stay responsive.  A virtualized model has no such cost: the
         full set goes in, and only the cells the user can see get decoded.
+
+        A fresh filter jumps back to the top (the list is newest-first); after
+        a recycle/export the caller restores the saved pixel scroll value
+        (see ``apply_filters``), so the viewport stays where the action
+        happened instead of jumping.
         """
         self._record_by_id = {str(record.media_id): record for record in self._records}
         # Grid cells always show the thumbnail variant; the "original" preview
@@ -1616,7 +1648,8 @@ class RealReadOnlyWindow(QMainWindow):
         # alone, the offset clamps to the end of the new (shorter) list, so the
         # user lands on the oldest media; the list is newest-first, so go back
         # to the top and the visible window is well defined.
-        self.records_table.scrollToTop()
+        if scroll_to_top:
+            self.records_table.scrollToTop()
         # Drop pre-filter work first: those decodes belong to cells that may no
         # longer exist, and they would hold pool slots the visible cells need.
         self._reset_warm_queue()
@@ -2227,7 +2260,7 @@ class RealReadOnlyWindow(QMainWindow):
         self._last_previewed_id = None
         self.preview_label.show_message("已移入回收站")
         self.preview_status.setText(f"已移入回收站：{outcome.relative_path}")
-        self.apply_filters()
+        self.apply_filters(preserve_position=True)
         self._set_status(
             f"已移入回收站：{outcome.relative_path}"
             f"（{_human_bytes(outcome.byte_size)}，可在系统回收站还原）"
@@ -2409,7 +2442,7 @@ class RealReadOnlyWindow(QMainWindow):
             f"已导出：{export.written_path}（{_human_bytes(export.byte_size)}）{note}；"
             f"源文件已移入回收站：{recycle.relative_path}"
         )
-        self.apply_filters()
+        self.apply_filters(preserve_position=True)
         self._set_status(
             f"已导出原图并移入回收站：{export.written_path}"
             f"（源文件可在系统回收站还原）"
@@ -2488,11 +2521,13 @@ class RealReadOnlyWindow(QMainWindow):
             self._set_status("已取消导出，未写入任何文件")
             return None
         self._last_export_dir = directory
+        total = len(selected)
         result = self._run_blocking(
             lambda: self._export_batch(selected, Path(directory), skipped),
-            f"正在解密并导出 {len(selected)} 张原图…",
+            f"正在解密并导出 {total} 张原图…",
+            progress_slot=lambda done: self._on_batch_progress(done, total, "导出原图"),
         )
-        return self._finish_batch("批量导出原图", len(selected), result, skipped)
+        return self._finish_batch("批量导出原图", total, result, skipped)
 
     def _export_batch(
         self, records, directory: Path, skipped=()
@@ -2507,7 +2542,7 @@ class RealReadOnlyWindow(QMainWindow):
         failed: list[tuple[str, str]] = []
         skipped = list(skipped)
         used: set[Path] = set()
-        for record in records:
+        for position, record in enumerate(records, start=1):
             state = self._availability_of(record)
             if state != "original_available":
                 # Availability here is a plain stat (no decryption), so this
@@ -2516,6 +2551,7 @@ class RealReadOnlyWindow(QMainWindow):
                     state, f"源文件状态异常（{state}），无原图可导出"
                 )
                 skipped.append((record.file.relative_path, reason))
+                self._emit_progress(position)
                 continue
             target = directory / _export_suggested_name(record.file.relative_path)
             # Two same-named originals in one session must not overwrite each
@@ -2536,6 +2572,7 @@ class RealReadOnlyWindow(QMainWindow):
                 failed.append(
                     (record.file.relative_path, f"{outcome.error_code}｜{outcome.error_message}")
                 )
+            self._emit_progress(position)
         return BatchOutcome(
             action="批量导出原图",
             requested=len(records),
@@ -2553,18 +2590,20 @@ class RealReadOnlyWindow(QMainWindow):
         if not self._confirm_batch("批量移到回收站", selected):
             self._set_status("已取消：文件未做任何改动")
             return None
+        total = len(selected)
         result = self._run_blocking(
             lambda: self._recycle_batch(selected),
-            f"正在把 {len(selected)} 个文件移入回收站…",
+            f"正在把 {total} 个文件移入回收站…",
+            progress_slot=lambda done: self._on_batch_progress(done, total, "移入回收站"),
         )
-        return self._finish_batch("批量移到回收站", len(selected), result)
+        return self._finish_batch("批量移到回收站", total, result)
 
     def _recycle_batch(self, records) -> BatchOutcome:
         """Worker-side: recycle one file at a time, collecting every receipt."""
         succeeded: list[tuple[str, str]] = []
         failed: list[tuple[str, str]] = []
         recycled_ids: list[str] = []
-        for record in records:
+        for position, record in enumerate(records, start=1):
             outcome = self._facade.recycle_record(record)
             if outcome.ok:
                 succeeded.append(
@@ -2575,6 +2614,7 @@ class RealReadOnlyWindow(QMainWindow):
                 failed.append(
                     (record.file.relative_path, f"{outcome.error_code}｜{outcome.error_message}")
                 )
+            self._emit_progress(position)
         return BatchOutcome(
             action="批量移到回收站",
             requested=len(records),
@@ -2625,11 +2665,13 @@ class RealReadOnlyWindow(QMainWindow):
             self._set_status("已取消：未选择导出位置，文件未做任何改动")
             return None
         self._last_export_dir = directory
+        total = len(selected)
         result = self._run_blocking(
             lambda: self._export_then_recycle_batch(selected, Path(directory), skipped),
-            f"正在导出 {len(selected)} 张原图并移入回收站…",
+            f"正在导出 {total} 张原图并移入回收站…",
+            progress_slot=lambda done: self._on_batch_progress(done, total, "导出并回收"),
         )
-        return self._finish_batch("批量导出后移入回收站", len(selected), result, skipped)
+        return self._finish_batch("批量导出后移入回收站", total, result, skipped)
 
     def _export_then_recycle_batch(self, records, directory: Path, skipped=()) -> BatchOutcome:
         """Worker-side: export each record, recycle it only when the export stuck."""
@@ -2638,7 +2680,7 @@ class RealReadOnlyWindow(QMainWindow):
         skipped = list(skipped)
         recycled_ids: list[str] = []
         used: set[Path] = set()
-        for record in records:
+        for position, record in enumerate(records, start=1):
             state = self._availability_of(record)
             if state != "original_available":
                 # 无原图可导出的记录既不导出也不回收：没有备份的源文件保持不动。
@@ -2646,6 +2688,7 @@ class RealReadOnlyWindow(QMainWindow):
                     state, f"源文件状态异常（{state}），无原图可导出"
                 )
                 skipped.append((record.file.relative_path, f"{reason}，未回收"))
+                self._emit_progress(position)
                 continue
             target = directory / _export_suggested_name(record.file.relative_path)
             counter = 1
@@ -2660,6 +2703,7 @@ class RealReadOnlyWindow(QMainWindow):
                         f"导出失败未回收：{outcome.error_code}｜{outcome.error_message}",
                     )
                 )
+                self._emit_progress(position)
                 continue
             used.add(Path(outcome.written_path))
             note = f"{outcome.width}×{outcome.height}"
@@ -2678,6 +2722,7 @@ class RealReadOnlyWindow(QMainWindow):
                         f"导出成功但移入回收站失败：{recycle.error_code}｜{recycle.error_message}",
                     )
                 )
+            self._emit_progress(position)
         return BatchOutcome(
             action="批量导出后移入回收站",
             requested=len(records),
@@ -2733,8 +2778,9 @@ class RealReadOnlyWindow(QMainWindow):
         if outcome.recycled_media_ids:
             # Rebuild the album without the recycled records, then restore the
             # batch report: the user asked for a management action, so its
-            # result is what the status bar should be showing.
-            self.apply_filters()
+            # result is what the status bar should be showing.  The viewport
+            # stays where the batch ran instead of jumping to the top.
+            self.apply_filters(preserve_position=True)
         self._set_status(message + detail)
         return outcome
 

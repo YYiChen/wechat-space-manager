@@ -273,7 +273,7 @@ def write_manifest() -> None:
 
     manifest = {
         "app": APP_NAME,
-        "version": "0.1.1",
+        "version": "0.1.2",
         "source_revision": revision,
         "mode": "read-only-beta",
         "cleanup_capability": False,
@@ -304,7 +304,7 @@ def write_release_root_files() -> None:
         print("[build] warning: docs/disclaimer.md missing; skipping release files")
         return
     header = (
-        "微信空间管理器（只读相册版）v0.1.1 —— 使用前必读\n"
+        "微信空间管理器（只读相册版）v0.1.2 —— 使用前必读\n"
         "（以下内容与仓库 docs/disclaimer.md 一致）\n"
         "========================================\n\n"
     )

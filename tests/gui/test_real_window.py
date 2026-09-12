@@ -1741,6 +1741,79 @@ def test_refilter_heals_stale_failure_marks_on_files(qtbot):
     assert model.data(model.index(0, 0), THUMB_STATE_ROLE) == THUMB_NONE
 
 
+def test_recycle_keeps_the_viewport_where_the_action_happened(qtbot, monkeypatch):
+    """清理完不回顶部：视口锚定在原首行（被删则顺延同行号）。"""
+    from PySide6.QtWidgets import QMessageBox
+
+    window = _shown_window(qtbot, _many_records(300))
+    grid = window.records_table
+    grid.scrollTo(
+        window._grid_model.index(100, 0), grid.ScrollHint.PositionAtTop
+    )
+    grid.doItemsLayout()
+    # Settle the selection first: selecting itself may nudge the viewport
+    # (EnsureVisible), which is unrelated to the recycle under test.
+    for _ in range(2):
+        window.select_row(grid.first_visible_row() + 2)
+        grid.doItemsLayout()
+    before = grid.first_visible_row()
+    assert before > 0
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
+
+    outcome = window.recycle_selected()
+
+    assert outcome is not None and outcome.ok is True
+    grid.doItemsLayout()
+    assert grid.first_visible_row() == before
+
+
+def test_batch_recycle_reports_per_file_progress(qtbot, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    recs = (
+        _record(MediaType.IMAGE, 1024, "a.dat", attach_dir="8a8b"),
+        _record(MediaType.IMAGE, 2048, "b.dat", attach_dir="8a8b"),
+        _record(MediaType.IMAGE, 4096, "c.dat", attach_dir="8a8b"),
+    )
+    window = _shown_window(qtbot, recs)
+    window.select_rows([0, 1, 2])
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
+    seen: list = []
+    original = window._progress_value
+    window._progress_value = lambda percent: (seen.append(percent), original(percent))
+
+    outcome = window.recycle_selected_batch()
+
+    assert outcome is not None and outcome.ok is True
+    assert seen == [33, 66, 100]
+    assert "成功 3 项" in window.statusBar().currentMessage()
+
+
+def test_batch_export_reports_per_file_progress(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    recs = (
+        _record(MediaType.IMAGE, 1024, "a.dat", attach_dir="8a8b"),
+        _record(MediaType.IMAGE, 2048, "b.dat", attach_dir="8a8b"),
+    )
+    window = _shown_window(qtbot, recs)
+    window._facade.export_payload = b"original-bytes"
+    window.select_rows([0, 1])
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.Yes))
+    monkeypatch.setattr(
+        QFileDialog, "getExistingDirectory",
+        staticmethod(lambda *a, **k: str(tmp_path)),
+    )
+    seen: list = []
+    original = window._progress_value
+    window._progress_value = lambda percent: (seen.append(percent), original(percent))
+
+    outcome = window.export_selected_batch()
+
+    assert outcome is not None and outcome.ok is True
+    assert seen == [50, 100]
+
+
 def test_file_records_never_get_queued_for_decoding(qtbot, records):
     """文件/语音不可解码：可见区预热必须跳过它们，不让占位符空转。"""
     from wechat_cleaner.gui.gallery import THUMB_NONE
