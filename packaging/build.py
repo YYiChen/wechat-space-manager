@@ -273,7 +273,7 @@ def write_manifest() -> None:
 
     manifest = {
         "app": APP_NAME,
-        "version": "0.1.0",
+        "version": "0.1.1",
         "source_revision": revision,
         "mode": "read-only-beta",
         "cleanup_capability": False,
@@ -287,6 +287,38 @@ def write_manifest() -> None:
     target = ARTIFACT_DIR / "BUILD-MANIFEST.json"
     target.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[build] wrote {target}")
+
+
+def write_release_root_files() -> None:
+    """Copy the human-readable release files next to the executable.
+
+    Beginners never open ``_internal/licenses``: the disclaimer, the license
+    and the notice travel at the artifact root so they are seen before the
+    first double-click.  The disclaimer text is generated from
+    ``docs/disclaimer.md`` so the two cannot drift apart unnoticed.
+    """
+    source = REPO_ROOT / "docs" / "disclaimer.md"
+    try:
+        body = source.read_text(encoding="utf-8")
+    except OSError:
+        print("[build] warning: docs/disclaimer.md missing; skipping release files")
+        return
+    header = (
+        "微信空间管理器（只读相册版）v0.1.1 —— 使用前必读\n"
+        "（以下内容与仓库 docs/disclaimer.md 一致）\n"
+        "========================================\n\n"
+    )
+    try:
+        (ARTIFACT_DIR / "免责声明_使用前必读.txt").write_text(
+            header + body, encoding="utf-8-sig"
+        )
+        for name in ("LICENSE", "NOTICE"):
+            blob = (REPO_ROOT / name).read_bytes()
+            (ARTIFACT_DIR / f"{name}.txt").write_bytes(blob)
+    except OSError as exc:
+        print(f"[build] warning: could not write release root files ({exc!r})")
+        return
+    print(f"[build] wrote release root files to {ARTIFACT_DIR}")
 
 
 def _point_latest(target: Path) -> None:
@@ -316,6 +348,7 @@ def main(argv: list[str] | None = None) -> int:
             print("[build] PyInstaller failed")
             return 1
         write_manifest()
+        write_release_root_files()
         _point_latest(ARTIFACT_DIR)
         return verify()
 

@@ -95,6 +95,10 @@ def launch(argv: list[str] | None = None) -> int:
     demo, data_root_override = parse_launch_args(argv)
 
     app = QApplication.instance() or QApplication(argv or [])
+    from .disclaimer import ensure_disclaimer_accepted
+
+    if not ensure_disclaimer_accepted():
+        return 0
     from .real_window import _app_icon_file
 
     icon_file = _app_icon_file()
