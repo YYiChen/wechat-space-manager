@@ -60,6 +60,18 @@ from PySide6.QtWidgets import (
 )
 
 from wechat_cleaner.domain.contracts import MediaRecord, MediaType
+from wechat_cleaner.real_db.mapping import session_dir_of
+
+# Unified label for records that cannot be attributed to a conversation
+# (files/videos/voice stored by month instead of by chat).  Shown in tile
+# tooltips, the selection line and the session filter alike, so these files
+# are findable under one name everywhere.
+UNATTRIBUTED_LABEL = "未归属会话"
+
+
+def is_attributable(record: MediaRecord) -> bool:
+    """False when a record lives outside the per-chat attach layout."""
+    return bool(session_dir_of(record.file.relative_path))
 
 # Cell geometry.  Every cell is exactly this size and the picture is drawn
 # inside a fixed square frame, so photos of any aspect ratio line up in a
@@ -835,11 +847,14 @@ class MediaGridModel(QAbstractListModel):
                 return THUMB_NONE
             return THUMB_PENDING
         if role == Qt.ToolTipRole:
-            return (
+            tip = (
                 f"{record.file.relative_path}\n"
                 f"大小：{_human_bytes(record.file.byte_size)}\n"
                 f"时间：{record.observed_at.strftime('%Y-%m-%d %H:%M')}"
             )
+            if not is_attributable(record):
+                tip += f"\n{UNATTRIBUTED_LABEL}（按月存放，无法归属到具体联系人）"
+            return tip
         if role == Qt.SizeHintRole:
             return _CELL_SIZE
         return None

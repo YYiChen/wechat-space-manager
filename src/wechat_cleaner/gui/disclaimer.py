@@ -28,14 +28,14 @@ __all__ = [
     "remember_disclaimer_accepted",
 ]
 
-DISCLAIMER_VERSION = 2
+DISCLAIMER_VERSION = 3
 _SETTINGS_KEY = "disclaimer_accepted_version"
 SKIP_ENV_VAR = "WCSM_SKIP_DISCLAIMER"
 
-APP_VERSION = "v0.1.2"
+APP_VERSION = "v0.1.3"
 
 BOUNDARY_TITLE = "使用前请了解本软件能做什么"
-BOUNDARY_TEXT = """微信空间管理器（只读相册版）v0.1.2
+BOUNDARY_TEXT = """微信空间管理器（只读相册版）v0.1.3
 
 【它会做的】
 • 读取你电脑上的微信数据，在本机生成相册、筛选和预览

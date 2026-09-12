@@ -70,9 +70,11 @@ from .data_root import find_data_root
 from .gallery import (
     _THUMB_BOX,
     THUMB_DECODE_EDGE,
+    UNATTRIBUTED_LABEL,
     MediaGalleryView,
     MediaGridModel,
     decode_supported,
+    is_attributable,
 )
 from .real_session import (
     READ_ONLY_NOTICE,
@@ -84,6 +86,10 @@ from .real_session import (
     RecycleOutcome,
     VideoClipOutcome,
 )
+
+# Combo data value for the pseudo-session "unattributable records".  Real
+# attach dirs are 32-hex hashes, so this can never collide with one.
+UNATTRIBUTED_SESSION = "__unattributed__"
 
 _TYPE_LABELS = {
     "all": "全部类型",
@@ -1066,17 +1072,26 @@ class RealReadOnlyWindow(QMainWindow):
         Only conversations that actually have media on disk are listed, **most
         bytes first under the current filter** (not by all-time totals), and
         every entry carries its share — ``小张［联系人］（123 项，共 1.2 GB)`` —
-        so the size impact of a decision is visible while choosing.  The
+        so the size impact of a decision is visible while choosing.  Records
+        outside the per-chat layout get one unified, selectable entry —
+        ``未归属会话`` — right after the total, so they are searchable (the
+        combo completes on typing) and manageable like any conversation.  The
         caller's session choice is preserved when it still has matching
         records; otherwise the dropdown falls back to all sessions.
 
         Returns ``{attach dir: (count, bytes)}`` for the status/summary lines.
+        The unattributable share is ``total - sum(stats)`` by construction, so
+        the dropdown can never show a total the rows do not add up to.
         """
         source = self._all_records if records is None else records
         stats: dict[str, list] = {}
+        unattributed_count = 0
+        unattributed_bytes = 0
         for record in source:
             dir_name = session_dir_of(record.file.relative_path)
             if not dir_name:
+                unattributed_count += 1
+                unattributed_bytes += record.file.byte_size
                 continue
             entry = stats.get(dir_name)
             if entry is None:
@@ -1096,6 +1111,12 @@ class RealReadOnlyWindow(QMainWindow):
         try:
             combo.clear()
             combo.addItem(f"全部会话（{total_count} 项，共 {_human_bytes(total_bytes)}）", "")
+            if unattributed_count:
+                combo.addItem(
+                    f"{UNATTRIBUTED_LABEL}（{unattributed_count} 项，"
+                    f"共 {_human_bytes(unattributed_bytes)}）",
+                    UNATTRIBUTED_SESSION,
+                )
             for dir_name, (count, byte_size) in sorted(
                 stats.items(), key=lambda kv: (-kv[1][1], -kv[1][0], kv[0])
             ):
@@ -1248,7 +1269,11 @@ class RealReadOnlyWindow(QMainWindow):
             session_dir = self.session_combo.currentData() or ""
         except RuntimeError:
             session_dir = ""
-        if session_dir:
+        if session_dir == UNATTRIBUTED_SESSION:
+            selected = [
+                record for record in resolved if not is_attributable(record)
+            ]
+        elif session_dir:
             selected = [
                 record
                 for record in resolved
@@ -1272,7 +1297,12 @@ class RealReadOnlyWindow(QMainWindow):
         self._render_grid(scroll_to_top=not preserve_position)
         self._update_filter_summary(resolved, stats)
         notes = ""
-        if session_dir:
+        if session_dir == UNATTRIBUTED_SESSION:
+            notes += (
+                f"｜{UNATTRIBUTED_LABEL}：按月存放的文件/视频/语音，"
+                "无法归属到具体联系人，但可照常预览/导出/回收"
+            )
+        elif session_dir:
             notes += "｜会话筛选覆盖图片/缩略图（文件、视频、语音按月存放，无法归属会话）"
         if self.merged_check.isChecked():
             notes += "｜仅显示合并转发聊天记录的附件"
@@ -1313,8 +1343,9 @@ class RealReadOnlyWindow(QMainWindow):
             text += "｜占用最多：" + "、".join(parts)
         if unattributed:
             text += (
-                f"｜另有 {unattributed} 条无法归属会话"
-                f"（共 {_human_bytes(unattributed_bytes)}，多为按月存放的文件/视频/语音）"
+                f"｜另有 {unattributed} 条{UNATTRIBUTED_LABEL}"
+                f"（共 {_human_bytes(unattributed_bytes)}，多为按月存放的文件/视频/语音，"
+                "可在会话下拉中单独查看）"
             )
         label.setText(text)
 
@@ -1589,7 +1620,10 @@ class RealReadOnlyWindow(QMainWindow):
         """
         dir_name = session_dir_of(record.file.relative_path)
         if not dir_name:
-            return "该类型按月份存放，无法归属到具体会话"
+            return (
+                f"「{UNATTRIBUTED_LABEL}」：该类型按月份存放，"
+                "无法归属到具体会话，可在会话筛选中统一查看"
+            )
         chat = self._session_mapping.get(dir_name) or {}
         name = str(chat.get("name") or "")
         username = str(chat.get("username") or "")

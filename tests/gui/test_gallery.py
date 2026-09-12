@@ -392,6 +392,29 @@ def test_clear_unsupported_failures_heals_files_but_keeps_video_failures(qtbot):
     assert model.data(model.index(1, 0), THUMB_STATE_ROLE) == THUMB_FAILED
 
 
+def test_tooltip_carries_the_unified_label_for_unattributable_files(qtbot):
+    from PySide6.QtCore import Qt
+
+    model = MediaGridModel()
+    monthly = MediaRecord(
+        account_id="wxid_demo_alpha",
+        file=FileIdentity(
+            relative_path="msg\\file\\2026-02\\report.pdf",
+            byte_size=4096,
+            modified_time_ns=1,
+        ),
+        media_type=MediaType.FILE,
+        observed_at=datetime(2026, 2, 1, tzinfo=UTC),
+        mapping_confidence=MappingConfidence.UNMAPPED,
+        mapping_reason="filesystem scan only",
+    )
+    chatty = _record(MediaType.IMAGE)
+    model.set_records((monthly, chatty))
+
+    assert "未归属会话" in model.data(model.index(0, 0), Qt.ToolTipRole)
+    assert "未归属会话" not in model.data(model.index(1, 0), Qt.ToolTipRole)
+
+
 def test_model_serves_cover_extensions_to_the_delegate(qtbot):
     model = MediaGridModel()
     model.set_records((_file_record("report.pdf"),))

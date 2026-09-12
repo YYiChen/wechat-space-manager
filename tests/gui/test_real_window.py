@@ -1814,6 +1814,69 @@ def test_batch_export_reports_per_file_progress(qtbot, tmp_path, monkeypatch):
     assert seen == [50, 100]
 
 
+def _monthly_record(name: str = "report.pdf", size: int = 4096) -> MediaRecord:
+    """A file stored by month: attributable to no conversation."""
+    return MediaRecord(
+        account_id="wxid_demo_alpha",
+        file=FileIdentity(
+            relative_path=f"msg/file/2026-02/{name}", byte_size=size,
+            modified_time_ns=1,
+        ),
+        media_type=MediaType.FILE,
+        observed_at=datetime(2026, 2, 1, tzinfo=UTC),
+        mapping_confidence=MappingConfidence.UNMAPPED,
+        mapping_reason="filesystem scan only",
+    )
+
+
+def test_unattributed_records_get_a_searchable_unified_entry(qtbot):
+    from wechat_cleaner.gui.real_window import UNATTRIBUTED_SESSION
+
+    chat = _record(MediaType.IMAGE, 1024, "a.dat", attach_dir="8a8b")
+    stray = _monthly_record("big.pdf", size=10 * 1024 * 1024)
+    facade = FakeRealSessionFacade(records=(chat, stray))
+    facade.session_names = {"8a8b": "小张"}
+    window = RealReadOnlyWindow(facade)
+    qtbot.addWidget(window)
+    window.set_data_root("C:\\synthetic\\xwechat_files")
+    window.detect_accounts()
+    window.connect_session()
+
+    assert window.session_combo.count() == 3
+    assert window.session_combo.itemData(1) == UNATTRIBUTED_SESSION
+    assert "未归属会话" in window.session_combo.itemText(1)
+    assert "10.0 MB" in window.session_combo.itemText(1)
+
+    # The pseudo-session filters exactly the unattributable records.
+    window.session_combo.setCurrentIndex(window.session_combo.findData(UNATTRIBUTED_SESSION))
+    assert window.apply_filters() == 1
+    assert window.records_table.model().record_at(0) is stray
+    assert "未归属会话" in window.statusBar().currentMessage()
+
+    # And the single-selection line carries the same unified label.
+    window.select_row(0)
+    assert "「未归属会话」" in window.selection_label.text()
+
+
+def test_filter_totals_equal_sessions_plus_unattributed(qtbot):
+    """总量恒等于各会话之和加未归属：下拉数字永远对得上。"""
+    from wechat_cleaner.real_db import session_dir_of
+
+    chat = _record(MediaType.IMAGE, 1024, "a.dat", attach_dir="8a8b")
+    chat2 = _record(MediaType.IMAGE, 2048, "b.dat", attach_dir="99cc")
+    stray = _monthly_record("big.pdf", size=4096)
+    window = _shown_window(qtbot, (chat, chat2, stray))
+
+    shown = window._grid_model.records()
+    attached = sum(1 for record in shown if session_dir_of(record.file.relative_path))
+    unattributed = sum(1 for record in shown if not session_dir_of(record.file.relative_path))
+
+    assert (attached, unattributed, len(shown)) == (2, 1, 3)
+    combo = window.session_combo
+    assert any(combo.itemData(row) == "__unattributed__" for row in range(combo.count()))
+    assert "未归属会话" in window.filter_summary_label.text()
+
+
 def test_file_records_never_get_queued_for_decoding(qtbot, records):
     """文件/语音不可解码：可见区预热必须跳过它们，不让占位符空转。"""
     from wechat_cleaner.gui.gallery import THUMB_NONE
