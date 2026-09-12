@@ -1,0 +1,445 @@
+{
+  "$defs": {
+    "AccountRef": {
+      "additionalProperties": false,
+      "description": "A WeChat account and its authoritative filesystem boundary.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "account_root": {
+          "maxLength": 1024,
+          "minLength": 3,
+          "title": "Account Root",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        }
+      },
+      "required": [
+        "account_id",
+        "account_root"
+      ],
+      "title": "AccountRef",
+      "type": "object"
+    },
+    "ContactKind": {
+      "enum": [
+        "direct",
+        "group",
+        "official",
+        "unknown"
+      ],
+      "title": "ContactKind",
+      "type": "string"
+    },
+    "ContactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "contact_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Contact Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ContactKind"
+        },
+        "session_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Hash"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "remark": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remark"
+        }
+      },
+      "required": [
+        "account_id",
+        "contact_id",
+        "kind"
+      ],
+      "title": "ContactRef",
+      "type": "object"
+    },
+    "DatabaseEvidence": {
+      "additionalProperties": false,
+      "description": "A redacted, structured database observation; no message body is allowed.",
+      "properties": {
+        "schema_version": {
+          "default": "1.1",
+          "examples": [
+            "1.1"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "evidence_kind": {
+          "$ref": "#/$defs/EvidenceKind"
+        },
+        "source_table": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_]+$",
+          "title": "Source Table",
+          "type": "string"
+        },
+        "source_row_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Row Digest",
+          "type": "string"
+        },
+        "media_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Media Id"
+        },
+        "contact": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContactRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "message_local_id": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message Local Id"
+        },
+        "message_time": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message Time"
+        },
+        "relative_path": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relative Path"
+        },
+        "byte_size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Byte Size"
+        },
+        "confidence": {
+          "$ref": "#/$defs/MappingConfidence",
+          "default": "medium"
+        }
+      },
+      "required": [
+        "account_id",
+        "evidence_kind",
+        "source_table",
+        "source_row_digest"
+      ],
+      "title": "DatabaseEvidence",
+      "type": "object"
+    },
+    "DatabaseEvidenceConflict": {
+      "additionalProperties": false,
+      "description": "Conflict metadata represented by digests rather than raw database values.",
+      "properties": {
+        "schema_version": {
+          "default": "1.1",
+          "examples": [
+            "1.1"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "conflict_id": {
+          "format": "uuid",
+          "title": "Conflict Id",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "media_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Media Id"
+        },
+        "field_name": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_.-]+$",
+          "title": "Field Name",
+          "type": "string"
+        },
+        "candidate_digests": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 2,
+          "title": "Candidate Digests",
+          "type": "array"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account_id",
+        "field_name",
+        "candidate_digests",
+        "reason"
+      ],
+      "title": "DatabaseEvidenceConflict",
+      "type": "object"
+    },
+    "EvidenceKind": {
+      "enum": [
+        "media_path",
+        "media_hash",
+        "message",
+        "contact",
+        "session"
+      ],
+      "title": "EvidenceKind",
+      "type": "string"
+    },
+    "MappingConfidence": {
+      "description": "Strength of evidence connecting a disk file to a WeChat message.",
+      "enum": [
+        "exact",
+        "high",
+        "medium",
+        "low",
+        "unmapped"
+      ],
+      "title": "MappingConfidence",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Read-only output of a database-copy adapter, safe to persist as metadata.",
+  "properties": {
+    "schema_version": {
+      "default": "1.1",
+      "examples": [
+        "1.1"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "envelope_id": {
+      "format": "uuid",
+      "title": "Envelope Id",
+      "type": "string"
+    },
+    "account": {
+      "$ref": "#/$defs/AccountRef"
+    },
+    "database_copy_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,255}$",
+      "title": "Database Copy Id",
+      "type": "string"
+    },
+    "database_copy_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Database Copy Sha256",
+      "type": "string"
+    },
+    "database_schema_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Database Schema Version",
+      "type": "string"
+    },
+    "adapter_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Adapter Version",
+      "type": "string"
+    },
+    "read_at": {
+      "format": "date-time",
+      "title": "Read At",
+      "type": "string"
+    },
+    "evidence": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DatabaseEvidence"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "conflicts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DatabaseEvidenceConflict"
+      },
+      "title": "Conflicts",
+      "type": "array"
+    }
+  },
+  "required": [
+    "account",
+    "database_copy_id",
+    "database_copy_sha256",
+    "database_schema_version",
+    "adapter_version"
+  ],
+  "title": "DatabaseEvidenceEnvelope",
+  "type": "object",
+  "$id": "https://wechat-space-manager.local/schema/database-evidence-envelope/1.1.json"
+}

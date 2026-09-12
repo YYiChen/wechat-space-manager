@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "AccountRef": {
+      "additionalProperties": false,
+      "description": "A WeChat account and its authoritative filesystem boundary.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "account_root": {
+          "maxLength": 1024,
+          "minLength": 3,
+          "title": "Account Root",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        }
+      },
+      "required": [
+        "account_id",
+        "account_root"
+      ],
+      "title": "AccountRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Minimal immutable identity binding a record to one scanner observation.",
+  "properties": {
+    "schema_version": {
+      "default": "1.1",
+      "examples": [
+        "1.1"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scan_id": {
+      "format": "uuid",
+      "title": "Scan Id",
+      "type": "string"
+    },
+    "account": {
+      "$ref": "#/$defs/AccountRef"
+    },
+    "scanned_at": {
+      "format": "date-time",
+      "title": "Scanned At",
+      "type": "string"
+    },
+    "scanner_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Scanner Version",
+      "type": "string"
+    },
+    "manifest_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Manifest Sha256",
+      "type": "string"
+    },
+    "source_copy_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Copy Id"
+    }
+  },
+  "required": [
+    "scan_id",
+    "account",
+    "scanned_at",
+    "scanner_version",
+    "manifest_sha256"
+  ],
+  "title": "ScanLineage",
+  "type": "object",
+  "$id": "https://wechat-space-manager.local/schema/scan-lineage/1.1.json"
+}

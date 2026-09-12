@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "RecoveryLocatorKind": {
+      "enum": [
+        "none",
+        "quarantine",
+        "recycle_bin"
+      ],
+      "title": "RecoveryLocatorKind",
+      "type": "string"
+    },
+    "RecoveryState": {
+      "enum": [
+        "not_applicable",
+        "available",
+        "restored",
+        "missing",
+        "unknown"
+      ],
+      "title": "RecoveryState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Opaque, non-absolute locator for a recoverable operation result.",
+  "properties": {
+    "schema_version": {
+      "default": "1.1",
+      "examples": [
+        "1.1"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "recovery_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,255}$",
+      "title": "Recovery Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/RecoveryLocatorKind"
+    },
+    "state": {
+      "$ref": "#/$defs/RecoveryState"
+    },
+    "relative_path": {
+      "anyOf": [
+        {
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Relative Path"
+    }
+  },
+  "required": [
+    "recovery_id",
+    "kind",
+    "state"
+  ],
+  "title": "RecoveryLocator",
+  "type": "object",
+  "$id": "https://wechat-space-manager.local/schema/recovery-locator/1.1.json"
+}

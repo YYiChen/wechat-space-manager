@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.1",
+  "selection_id": "44444444-4444-4444-8444-444444444444",
+  "scope": "manual",
+  "account_ids": ["wxid_demo"],
+  "scan_id": "11111111-1111-4111-8111-111111111111",
+  "scan_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "filter_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "selected_media_ids": ["22222222-2222-4222-8222-222222222222"],
+  "selected_record_keys": ["wxid_demo:msg-1"],
+  "selected_count": 1,
+  "selected_bytes": 4096,
+  "selection_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "created_at": "2026-09-09T08:00:00Z",
+  "expires_at": "2026-09-09T09:00:00Z"
+}

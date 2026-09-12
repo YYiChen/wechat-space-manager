@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "classification": "private-local-only",
+  "source_root": "REPLACE_WITH_LOCAL_XWECHAT_FILES_PATH",
+  "source_root_must_not_be_committed": true,
+  "full_storage_baseline": {
+    "measured_size_gib": 92.31,
+    "measurement_date": "2026-09-08",
+    "read_only": true
+  },
+  "forwarded_record_acceptance_fixture": {
+    "display_label": "local-rec-fixture",
+    "source_path": "REPLACE_WITH_LOCAL_REC_PATH",
+    "record_directory_count": 12,
+    "original_file_count": 121,
+    "thumbnail_file_count": 121,
+    "total_image_file_count": 242,
+    "successful_decode_count": 242,
+    "failed_decode_count": 0,
+    "required_mode": "read-only",
+    "contains_copied_private_data": false
+  },
+  "prohibitions": [
+    "do not commit this copied file",
+    "do not copy source media into the repository",
+    "do not log account identifiers, contact names, keys, or plaintext messages"
+  ]
+}

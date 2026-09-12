@@ -1,0 +1,54 @@
+version: 2
+updated_at: 2026-09-09
+max_active_agents_including_orchestrator: 4
+dispatch_rules:
+  - Do not dispatch parallel implementation before P3-GOV-01 creates a baseline commit.
+  - Dispatch only targets whose dependencies are done and whose owner has an isolated worktree.
+  - One agent claims one target and only its owned paths; the orchestrator alone updates shared files.
+  - Contract work is serial and lock-scoped; consumers never invent missing fields.
+  - Integration reports failures to owners and never repairs business modules.
+waves:
+  - id: W0
+    mode: serial
+    targets: [P3-GOV-01]
+    exit_gate: Fresh environment gate passes and a user-attributed baseline commit exists.
+  - id: W1
+    mode: serial
+    targets: [P3-CONTRACT-01]
+    exit_gate: All four Phase 3 contract locks are released after consumer review and compatibility tests.
+  - id: W2A
+    mode: parallel
+    targets: [P3-FIXTURE-01]
+    exit_gate: Expanded deterministic fixtures are done before data workers start.
+  - id: W2B
+    mode: parallel_batches
+    capacity_note: Keep orchestrator active and dispatch at most three workers simultaneously.
+    batches:
+      - [P3-INDEX-01, P3-FILTER-01, P3-GUI-SHELL-01]
+      - [P3-DBADAPTER-01, P3-EXECUTOR-01]
+    exit_gate: Each target passes owned tests and provides a complete handoff.
+  - id: W3
+    mode: serial
+    targets: [P3-WORKFLOW-01]
+    exit_gate: Headless facade passes end-to-end synthetic workflow tests.
+  - id: W4
+    mode: serial_same_owner
+    targets: [P3-GUI-FLOW-01]
+    exit_gate: GUI calls only the facade and passes offscreen workflow tests.
+  - id: W5
+    mode: serial
+    targets: [P3-ENTRY-01]
+    exit_gate: Desktop and legacy CLI launches work in a fresh environment.
+  - id: W6
+    mode: serial
+    targets: [P3-INTEGRATION-01]
+    exit_gate: AI-only public and synthetic Phase 3 gate returns zero; no private input is required or opened.
+  - id: W7
+    mode: human_serial
+    targets: [P3-PRIVATE-ACCEPT-01]
+    entry_gate: Readiness checker emits ready_for_human; AI stops after handoff.
+    exit_gate: Human operator approves aggregate read-only, dry-run and tiny recoverable-batch evidence.
+  - id: W8
+    mode: serial
+    targets: [P3-PACKAGE-01]
+    exit_gate: Source and portable artifacts, checksums, licenses and rollback material verify.

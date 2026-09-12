@@ -1,0 +1,418 @@
+{
+  "$defs": {
+    "AccountRef": {
+      "additionalProperties": false,
+      "description": "A WeChat account and its authoritative filesystem boundary.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "account_root": {
+          "maxLength": 1024,
+          "minLength": 3,
+          "title": "Account Root",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        }
+      },
+      "required": [
+        "account_id",
+        "account_root"
+      ],
+      "title": "AccountRef",
+      "type": "object"
+    },
+    "CleanupDisposition": {
+      "enum": [
+        "recycle_bin",
+        "quarantine",
+        "permanent"
+      ],
+      "title": "CleanupDisposition",
+      "type": "string"
+    },
+    "CleanupPlanSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "target_count": {
+          "minimum": 1,
+          "title": "Target Count",
+          "type": "integer"
+        },
+        "expected_reclaim_bytes": {
+          "minimum": 0,
+          "title": "Expected Reclaim Bytes",
+          "type": "integer"
+        },
+        "by_media_type": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "$ref": "#/$defs/MediaType"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "By Media Type",
+          "type": "array"
+        },
+        "includes_regenerable_cache": {
+          "default": false,
+          "title": "Includes Regenerable Cache",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "target_count",
+        "expected_reclaim_bytes",
+        "by_media_type"
+      ],
+      "title": "CleanupPlanSummary",
+      "type": "object"
+    },
+    "CleanupTarget": {
+      "additionalProperties": false,
+      "description": "One exact on-disk target included in an approved cleanup plan.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "target_id": {
+          "format": "uuid",
+          "title": "Target Id",
+          "type": "string"
+        },
+        "media_id": {
+          "format": "uuid",
+          "title": "Media Id",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "file": {
+          "$ref": "#/$defs/FileIdentity"
+        },
+        "media_type": {
+          "$ref": "#/$defs/MediaType"
+        },
+        "mapping_confidence": {
+          "$ref": "#/$defs/MappingConfidence"
+        },
+        "reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "media_id",
+        "account_id",
+        "file",
+        "media_type",
+        "mapping_confidence",
+        "reason"
+      ],
+      "title": "CleanupTarget",
+      "type": "object"
+    },
+    "CompatibilityMode": {
+      "description": "How a caller may process a known schema variant.",
+      "enum": [
+        "strict",
+        "backward_read",
+        "read_only_legacy"
+      ],
+      "title": "CompatibilityMode",
+      "type": "string"
+    },
+    "CompatibilityPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/CompatibilityMode",
+          "default": "strict"
+        },
+        "accepted_schema_versions": {
+          "default": [
+            "1.0"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "title": "Accepted Schema Versions",
+          "type": "array"
+        },
+        "allow_mutation": {
+          "default": false,
+          "title": "Allow Mutation",
+          "type": "boolean"
+        }
+      },
+      "title": "CompatibilityPolicy",
+      "type": "object"
+    },
+    "FileIdentity": {
+      "additionalProperties": false,
+      "description": "Stable facts rechecked before a cleanup executor touches a file.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "relative_path": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Relative Path",
+          "type": "string"
+        },
+        "byte_size": {
+          "minimum": 0,
+          "title": "Byte Size",
+          "type": "integer"
+        },
+        "modified_time_ns": {
+          "minimum": 0,
+          "title": "Modified Time Ns",
+          "type": "integer"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        }
+      },
+      "required": [
+        "relative_path",
+        "byte_size",
+        "modified_time_ns"
+      ],
+      "title": "FileIdentity",
+      "type": "object"
+    },
+    "MappingConfidence": {
+      "description": "Strength of evidence connecting a disk file to a WeChat message.",
+      "enum": [
+        "exact",
+        "high",
+        "medium",
+        "low",
+        "unmapped"
+      ],
+      "title": "MappingConfidence",
+      "type": "string"
+    },
+    "MediaType": {
+      "enum": [
+        "image",
+        "video",
+        "file",
+        "thumbnail",
+        "voice",
+        "other"
+      ],
+      "title": "MediaType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Immutable proposal.  Constructing this model never deletes a file.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "examples": [
+        "1.0"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "plan_id": {
+      "format": "uuid",
+      "title": "Plan Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "account": {
+      "$ref": "#/$defs/AccountRef"
+    },
+    "disposition": {
+      "$ref": "#/$defs/CleanupDisposition"
+    },
+    "targets": {
+      "items": {
+        "$ref": "#/$defs/CleanupTarget"
+      },
+      "title": "Targets",
+      "type": "array"
+    },
+    "summary": {
+      "$ref": "#/$defs/CleanupPlanSummary"
+    },
+    "policy": {
+      "$ref": "#/$defs/CompatibilityPolicy"
+    },
+    "acknowledged_risk": {
+      "default": false,
+      "title": "Acknowledged Risk",
+      "type": "boolean"
+    },
+    "scan_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scan Id"
+    },
+    "scan_manifest_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scan Manifest Sha256"
+    },
+    "filter_digest": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Filter Digest"
+    },
+    "selection_digest": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selection Digest"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    }
+  },
+  "required": [
+    "account",
+    "disposition",
+    "targets",
+    "summary"
+  ],
+  "title": "CleanupPlan",
+  "type": "object",
+  "$id": "https://wechat-space-manager.local/schema/cleanup-plan/1.0.json"
+}

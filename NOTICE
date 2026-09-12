@@ -1,0 +1,21 @@
+微信空间管理器 (wechat-space-manager)
+Copyright 2026 wechat-space-manager contributors
+
+本作品按 Apache License 2.0 分发（见 LICENSE）。
+
+第三方归属
+----------
+
+本作品使用了以下第三方组件，许可证与来源见
+packaging/licenses/THIRD-PARTY-NOTICES.md：
+
+- wechatauto-replica v1.2.1（Apache-2.0）
+  https://github.com/fanyuantaier/wechatauto-replica
+  固定 revision：798989c9b61066c120b59ceba636b557b776ff7f
+  仅调用其只读数据库与媒体接口，未修改其源代码。
+
+- PySide6（LGPL-3.0）、pydantic（MIT）、Pillow（HPND）、
+  platformdirs（MIT）—— 详见 THIRD-PARTY-NOTICES.md。
+
+与腾讯 / 微信无任何关联。本软件为独立的本地工具，
+不代表、不隶属于微信官方。

@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "CompatibilityMode": {
+      "description": "How a caller may process a known schema variant.",
+      "enum": [
+        "strict",
+        "backward_read",
+        "read_only_legacy"
+      ],
+      "title": "CompatibilityMode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "examples": [
+        "1.0"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "mode": {
+      "$ref": "#/$defs/CompatibilityMode",
+      "default": "strict"
+    },
+    "accepted_schema_versions": {
+      "default": [
+        "1.0"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "title": "Accepted Schema Versions",
+      "type": "array"
+    },
+    "allow_mutation": {
+      "default": false,
+      "title": "Allow Mutation",
+      "type": "boolean"
+    }
+  },
+  "title": "CompatibilityPolicy",
+  "type": "object",
+  "$id": "https://wechat-space-manager.local/schema/compatibility-policy/1.0.json"
+}

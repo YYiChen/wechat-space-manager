@@ -1,0 +1,96 @@
+version: 2
+updated_at: 2026-09-09
+default_policy: deny
+rules:
+  - path: AGENTS.md
+    owner: orchestrator
+  - path: README.md
+    owner: orchestrator
+  - path: pyproject.toml
+    owner: orchestrator
+  - path: src/wechat_cleaner/__init__.py
+    owner: orchestrator
+  - path: src/wechat_cleaner/__main__.py
+    owner: orchestrator
+  - path: tests/entrypoint/**
+    owner: orchestrator
+  - path: contracts/**
+    owner: contracts
+  - path: src/wechat_cleaner/domain/**
+    owner: contracts
+  - path: tests/contract/**
+    owner: contracts
+  - path: tests/fixtures_synthetic/**
+    owner: fixtures
+  - path: tests/fixtures_private.local.example/**
+    owner: fixtures
+  - path: src/wechat_cleaner/scanner/**
+    owner: scanner
+  - path: tests/scanner/**
+    owner: scanner
+  - path: src/wechat_cleaner/decoder/**
+    owner: decoder
+  - path: tests/decoder/**
+    owner: decoder
+  - path: src/wechat_cleaner/mapper/**
+    owner: mapper
+  - path: tests/mapper/**
+    owner: mapper
+  - path: src/wechat_cleaner/cleanup/**
+    owner: cleanup_safety
+  - path: tests/cleanup/**
+    owner: cleanup_safety
+  - path: src/wechat_cleaner/ui/**
+    owner: ui
+  - path: tests/ui/**
+    owner: ui
+  - path: tests/integration/**
+    owner: integration
+  - path: scripts/verify_*
+    owner: integration
+  - path: src/wechat_cleaner/real_db/**
+    owner: wechat_db_adapter
+  - path: tests/real_db/**
+    owner: wechat_db_adapter
+  - path: src/wechat_cleaner/real_media/**
+    owner: decoder
+  - path: tests/real_media/**
+    owner: decoder
+  - path: scripts/probe_real_media_key.py
+    owner: decoder
+  - path: scripts/harness_real_readonly.py
+    owner: integration
+  - path: src/wechat_cleaner/local_index/**
+    owner: local_index
+  - path: tests/local_index/**
+    owner: local_index
+  - path: src/wechat_cleaner/db_adapter/**
+    owner: wechat_db_adapter
+  - path: tests/db_adapter/**
+    owner: wechat_db_adapter
+  - path: src/wechat_cleaner/filtering/**
+    owner: filter_engine
+  - path: tests/filtering/**
+    owner: filter_engine
+  - path: src/wechat_cleaner/gui/**
+    owner: gui_shell
+  - path: tests/gui/**
+    owner: gui_shell
+  - path: src/wechat_cleaner/executor/**
+    owner: cleanup_executor
+  - path: tests/executor/**
+    owner: cleanup_executor
+  - path: src/wechat_cleaner/application/**
+    owner: application_workflow
+  - path: tests/application/**
+    owner: application_workflow
+  - path: packaging/**
+    owner: packaging
+  - path: tests/packaging/**
+    owner: packaging
+  - path: coordination/**
+    owner: orchestrator
+  - path: plan/**
+    owner: orchestrator
+  - path: docs/**
+    owner: orchestrator

@@ -1,0 +1,435 @@
+{
+  "$defs": {
+    "ContactKind": {
+      "enum": [
+        "direct",
+        "group",
+        "official",
+        "unknown"
+      ],
+      "title": "ContactKind",
+      "type": "string"
+    },
+    "ContactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "contact_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Contact Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ContactKind"
+        },
+        "session_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session Hash"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "remark": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remark"
+        }
+      },
+      "required": [
+        "account_id",
+        "contact_id",
+        "kind"
+      ],
+      "title": "ContactRef",
+      "type": "object"
+    },
+    "DecodeVariant": {
+      "enum": [
+        "thumbnail",
+        "original"
+      ],
+      "title": "DecodeVariant",
+      "type": "string"
+    },
+    "FileIdentity": {
+      "additionalProperties": false,
+      "description": "Stable facts rechecked before a cleanup executor touches a file.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "relative_path": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "title": "Relative Path",
+          "type": "string"
+        },
+        "byte_size": {
+          "minimum": 0,
+          "title": "Byte Size",
+          "type": "integer"
+        },
+        "modified_time_ns": {
+          "minimum": 0,
+          "title": "Modified Time Ns",
+          "type": "integer"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        }
+      },
+      "required": [
+        "relative_path",
+        "byte_size",
+        "modified_time_ns"
+      ],
+      "title": "FileIdentity",
+      "type": "object"
+    },
+    "FileStatus": {
+      "description": "Observed file state used by filtering and execution preflight.",
+      "enum": [
+        "present",
+        "missing",
+        "changed",
+        "duplicate"
+      ],
+      "title": "FileStatus",
+      "type": "string"
+    },
+    "MappingConfidence": {
+      "description": "Strength of evidence connecting a disk file to a WeChat message.",
+      "enum": [
+        "exact",
+        "high",
+        "medium",
+        "low",
+        "unmapped"
+      ],
+      "title": "MappingConfidence",
+      "type": "string"
+    },
+    "MediaRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "media_id": {
+          "format": "uuid",
+          "title": "Media Id",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "file": {
+          "$ref": "#/$defs/FileIdentity"
+        },
+        "media_type": {
+          "$ref": "#/$defs/MediaType"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "contact": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContactRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "message_local_id": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message Local Id"
+        },
+        "mapping_confidence": {
+          "$ref": "#/$defs/MappingConfidence"
+        },
+        "mapping_reason": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Mapping Reason",
+          "type": "string"
+        },
+        "original_media_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Original Media Id"
+        },
+        "is_regenerable_cache": {
+          "default": false,
+          "title": "Is Regenerable Cache",
+          "type": "boolean"
+        },
+        "record_key": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Record Key"
+        },
+        "scan_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scan Id"
+        },
+        "scan_manifest_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scan Manifest Sha256"
+        },
+        "message_time": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message Time"
+        },
+        "file_status": {
+          "$ref": "#/$defs/FileStatus",
+          "default": "present"
+        },
+        "ownership_status": {
+          "$ref": "#/$defs/OwnershipStatus",
+          "default": "mapped"
+        },
+        "protection_reasons": {
+          "default": [],
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Protection Reasons",
+          "type": "array"
+        },
+        "conflict_reasons": {
+          "default": [],
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Conflict Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "account_id",
+        "file",
+        "media_type",
+        "observed_at",
+        "mapping_confidence",
+        "mapping_reason"
+      ],
+      "title": "MediaRecord",
+      "type": "object"
+    },
+    "MediaType": {
+      "enum": [
+        "image",
+        "video",
+        "file",
+        "thumbnail",
+        "voice",
+        "other"
+      ],
+      "title": "MediaType",
+      "type": "string"
+    },
+    "OwnershipStatus": {
+      "description": "Whether a record can be attributed and offered for a plan.",
+      "enum": [
+        "mapped",
+        "unmapped",
+        "conflict",
+        "protected",
+        "unknown"
+      ],
+      "title": "OwnershipStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "examples": [
+        "1.0"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "media": {
+      "$ref": "#/$defs/MediaRecord"
+    },
+    "variant": {
+      "$ref": "#/$defs/DecodeVariant"
+    },
+    "cache_root": {
+      "maxLength": 1024,
+      "minLength": 3,
+      "title": "Cache Root",
+      "type": "string"
+    },
+    "max_edge_px": {
+      "anyOf": [
+        {
+          "maximum": 16384,
+          "minimum": 16,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Edge Px"
+    },
+    "retain_until": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retain Until"
+    }
+  },
+  "required": [
+    "media",
+    "variant",
+    "cache_root"
+  ],
+  "title": "DecodeRequest",
+  "type": "object",
+  "$id": "https://wechat-space-manager.local/schema/decode-request/1.0.json"
+}

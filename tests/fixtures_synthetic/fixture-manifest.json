@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "fixture_kind": "synthetic-filesystem-only",
+  "privacy": {
+    "contains_real_chat_data": false,
+    "contains_real_wechat_credentials": false,
+    "contains_real_media": false
+  },
+  "baseline_regular_file_count": 16,
+  "baseline_regular_file_bytes": 1712,
+  "accounts": [
+    {
+      "directory": "wxid_synthetic_alpha_d729",
+      "media_paths": [
+        "msg/attach/8a8b0c0d0e0f10111213141516171819/2026-02/Image/alpha_001.dat",
+        "msg/attach/8a8b0c0d0e0f10111213141516171819/2026-02/Rec/record-alpha-0001/0",
+        "msg/attach/8a8b0c0d0e0f10111213141516171819/2026-02/Rec/record-alpha-0001/0_t"
+      ]
+    },
+    {
+      "directory": "wxid_synthetic_beta_d729",
+      "media_paths": [
+        "msg/video/0a0b0c0d0e0f10111213141516171819/2026-03/clip_001.mp4",
+        "msg/file/0a0b0c0d0e0f10111213141516171819/2026-03/report_001.pdf"
+      ]
+    }
+  ],
+  "protected_directories": [
+    "db_storage",
+    "business/favorite",
+    "SendTemp"
+  ],
+  "regenerable_cache_directories": [
+    "cache"
+  ],
+  "reparse_point_policy": "never_traverse_or_delete"
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.1",
+  "execution_id": "88888888-8888-4888-8888-888888888888",
+  "plan_id": "33333333-3333-4333-8333-333333333333",
+  "mode": "quarantine",
+  "status": "succeeded",
+  "started_at": "2026-09-09T08:00:00Z",
+  "finished_at": "2026-09-09T08:00:02Z",
+  "processed_bytes": 4096,
+  "reclaimed_bytes": 0,
+  "recovery": [
+    {
+      "schema_version": "1.1",
+      "recovery_id": "recovery-1",
+      "kind": "quarantine",
+      "state": "available",
+      "relative_path": "quarantine\\recovery-1"
+    }
+  ]
+}

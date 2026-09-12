@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wechat-space-manager"
+version = "0.1.0"
+description = "A local-first, safety-gated Windows WeChat storage manager."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "wechat-space-manager contributors" },
+]
+dependencies = [
+  "platformdirs>=4.3",
+  "pydantic>=2.12,<3",
+  "Pillow>=11,<13",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "ruff>=0.9",
+]
+gui = [
+  "PySide6>=6.8,<7",
+]
+test = [
+  "pytest-qt>=4.4,<5",
+]
+package = [
+  "pyinstaller>=6.11,<7",
+]
+
+[project.scripts]
+wechat-space-manager = "wechat_cleaner.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wechat_cleaner"]
+
+[tool.pytest.ini_options]
+addopts = ["-ra", "--strict-markers"]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["wechat_cleaner"]

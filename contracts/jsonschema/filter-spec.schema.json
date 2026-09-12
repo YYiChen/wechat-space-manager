@@ -1,0 +1,243 @@
+{
+  "$defs": {
+    "FileStatus": {
+      "description": "Observed file state used by filtering and execution preflight.",
+      "enum": [
+        "present",
+        "missing",
+        "changed",
+        "duplicate"
+      ],
+      "title": "FileStatus",
+      "type": "string"
+    },
+    "FilterSortKey": {
+      "enum": [
+        "bytes",
+        "message_time",
+        "observed_at",
+        "media_id"
+      ],
+      "title": "FilterSortKey",
+      "type": "string"
+    },
+    "MappingConfidence": {
+      "description": "Strength of evidence connecting a disk file to a WeChat message.",
+      "enum": [
+        "exact",
+        "high",
+        "medium",
+        "low",
+        "unmapped"
+      ],
+      "title": "MappingConfidence",
+      "type": "string"
+    },
+    "MediaType": {
+      "enum": [
+        "image",
+        "video",
+        "file",
+        "thumbnail",
+        "voice",
+        "other"
+      ],
+      "title": "MediaType",
+      "type": "string"
+    },
+    "OwnershipStatus": {
+      "description": "Whether a record can be attributed and offered for a plan.",
+      "enum": [
+        "mapped",
+        "unmapped",
+        "conflict",
+        "protected",
+        "unknown"
+      ],
+      "title": "OwnershipStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Deterministic filter definition: values within a field are OR, fields are AND.",
+  "properties": {
+    "schema_version": {
+      "default": "1.1",
+      "examples": [
+        "1.1"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "spec_id": {
+      "format": "uuid",
+      "title": "Spec Id",
+      "type": "string"
+    },
+    "account_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 128,
+        "minLength": 3,
+        "pattern": "^[A-Za-z0-9_@.-]+$",
+        "type": "string"
+      },
+      "title": "Account Ids",
+      "type": "array"
+    },
+    "contact_ids": {
+      "default": [],
+      "items": {
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Contact Ids",
+      "type": "array"
+    },
+    "media_types": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MediaType"
+      },
+      "title": "Media Types",
+      "type": "array"
+    },
+    "mapping_confidences": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MappingConfidence"
+      },
+      "title": "Mapping Confidences",
+      "type": "array"
+    },
+    "file_statuses": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FileStatus"
+      },
+      "title": "File Statuses",
+      "type": "array"
+    },
+    "ownership_statuses": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/OwnershipStatus"
+      },
+      "title": "Ownership Statuses",
+      "type": "array"
+    },
+    "message_time_from": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message Time From"
+    },
+    "message_time_to": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Message Time To"
+    },
+    "observed_time_from": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observed Time From"
+    },
+    "observed_time_to": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observed Time To"
+    },
+    "min_bytes": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Min Bytes"
+    },
+    "max_bytes": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Bytes"
+    },
+    "include_protected": {
+      "default": false,
+      "title": "Include Protected",
+      "type": "boolean"
+    },
+    "include_conflicts": {
+      "default": false,
+      "title": "Include Conflicts",
+      "type": "boolean"
+    },
+    "include_unmapped": {
+      "default": false,
+      "title": "Include Unmapped",
+      "type": "boolean"
+    },
+    "sort_by": {
+      "$ref": "#/$defs/FilterSortKey",
+      "default": "bytes"
+    },
+    "descending": {
+      "default": true,
+      "title": "Descending",
+      "type": "boolean"
+    },
+    "page_size": {
+      "default": 200,
+      "maximum": 500,
+      "minimum": 1,
+      "title": "Page Size",
+      "type": "integer"
+    }
+  },
+  "title": "FilterSpec",
+  "type": "object",
+  "$id": "https://wechat-space-manager.local/schema/filter-spec/1.1.json"
+}

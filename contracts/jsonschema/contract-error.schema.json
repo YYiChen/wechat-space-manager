@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "ContractErrorCode": {
+      "enum": [
+        "SCHEMA_VERSION_UNSUPPORTED",
+        "INVALID_PATH",
+        "PATH_OUTSIDE_ACCOUNT_ROOT",
+        "FILE_IDENTITY_MISMATCH",
+        "ACCOUNT_MISMATCH",
+        "MAPPING_UNAVAILABLE",
+        "DECODER_UNAVAILABLE",
+        "DECODE_FAILED",
+        "CACHE_LIMIT_EXCEEDED",
+        "WECHAT_RUNNING",
+        "PLAN_INVALID",
+        "PLAN_STALE",
+        "EXECUTION_BLOCKED",
+        "UNKNOWN"
+      ],
+      "title": "ContractErrorCode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "examples": [
+        "1.0"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "code": {
+      "$ref": "#/$defs/ContractErrorCode"
+    },
+    "message": {
+      "maxLength": 1000,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "retryable": {
+      "default": false,
+      "title": "Retryable",
+      "type": "boolean"
+    },
+    "context": {
+      "default": [],
+      "items": {
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "type": "array"
+      },
+      "title": "Context",
+      "type": "array"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "title": "ContractError",
+  "type": "object",
+  "$id": "https://wechat-space-manager.local/schema/contract-error/1.0.json"
+}

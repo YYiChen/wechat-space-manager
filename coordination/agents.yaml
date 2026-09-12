@@ -1,0 +1,123 @@
+version: 2
+updated_at: 2026-09-09
+coordination_model: central-orchestrator-with-isolated-owners
+rules:
+  - One writable path owner at a time.
+  - A task may change shared contracts only while its named lock is active.
+  - Agents cannot execute R4 actions or delete real WeChat data.
+agents:
+  orchestrator:
+    role: Decompose work, assign targets, resolve dependency and ownership conflicts, admit integrations.
+    owns:
+      - AGENTS.md
+      - README.md
+      - .gitignore
+      - coordination/**
+      - plan/**
+      - docs/**
+      - pyproject.toml
+      - src/wechat_cleaner/__init__.py
+      - src/wechat_cleaner/__main__.py
+      - tests/entrypoint/**
+    may_accept: [R0, R1, R2, R3]
+  contracts:
+    role: Define stable domain contracts, versions, errors, and compatibility rules.
+    owns:
+      - contracts/**
+      - src/wechat_cleaner/domain/**
+      - tests/contract/**
+  fixtures:
+    role: Build deterministic synthetic filesystem fixtures and private-local acceptance templates.
+    owns:
+      - tests/fixtures_synthetic/**
+      - tests/fixtures_private.local.example/**
+    may_accept: [R0, R1]
+  scanner:
+    role: Implement read-only discovery, filesystem inventory, and index inputs.
+    owns:
+      - src/wechat_cleaner/scanner/**
+      - tests/scanner/**
+    may_accept: [R1]
+  decoder:
+    role: Implement image decoding, validation, and bounded cache artifacts.
+    owns:
+      - src/wechat_cleaner/decoder/**
+      - tests/decoder/**
+    may_accept: [R1, R2]
+  mapper:
+    role: Associate messages, contacts, and media using versioned contracts.
+    owns:
+      - src/wechat_cleaner/mapper/**
+      - tests/mapper/**
+    may_accept: [R1, R2]
+  cleanup_safety:
+    role: Design plans, invariant checks, receipts, recovery boundaries, and rejection paths.
+    owns:
+      - src/wechat_cleaner/cleanup/**
+      - tests/cleanup/**
+    may_accept: [R1, R2, R3]
+  ui:
+    role: Build read-only views, selection, confirmation presentation, and cache controls.
+    owns:
+      - src/wechat_cleaner/ui/**
+      - tests/ui/**
+    may_accept: [R0, R1]
+  integration:
+    role: Run cross-module checks, inspect contract changes, and maintain integration evidence.
+    owns:
+      - tests/integration/**
+      - scripts/verify_*
+    may_accept: [R0, R1, R2, R3]
+  local_index:
+    role: Build the local private metadata index, migrations, aggregates and pagination.
+    owns:
+      - src/wechat_cleaner/local_index/**
+      - tests/local_index/**
+    may_accept: [R1, R2]
+  wechat_db_adapter:
+    role: Read supported decrypted database copies and emit structured mapping evidence.
+    owns:
+      - src/wechat_cleaner/db_adapter/**
+      - tests/db_adapter/**
+    may_accept: [R1, R2]
+  filter_engine:
+    role: Implement precise filtering, retention rules, eligibility and selection snapshots.
+    owns:
+      - src/wechat_cleaner/filtering/**
+      - tests/filtering/**
+    may_accept: [R0, R1, R2]
+  gui_shell:
+    role: Build the PySide6 shell and wire it only through public application services.
+    owns:
+      - src/wechat_cleaner/gui/**
+      - tests/gui/**
+    may_accept: [R0, R1, R2, R3]
+  cleanup_executor:
+    role: Implement dry-run and recoverable cleanup execution over immutable plans.
+    owns:
+      - src/wechat_cleaner/executor/**
+      - tests/executor/**
+    may_accept: [R1, R2, R3]
+  application_workflow:
+    role: Compose module APIs behind a headless facade consumed by the desktop UI.
+    owns:
+      - src/wechat_cleaner/application/**
+      - tests/application/**
+    may_accept: [R1, R2, R3]
+  packaging:
+    role: Produce reproducible Windows source and portable distributions after acceptance.
+    owns:
+      - packaging/**
+      - tests/packaging/**
+    may_accept: [R0, R1, R2]
+  human_operator:
+    role: Perform explicitly approved private local acceptance; never contributes private artifacts to Git.
+    owns: []
+    may_accept: [R1, R2, R3]
+handoff_required:
+  - changed_files
+  - verification_command
+  - verification_result
+  - risk_level
+  - contract_lock_status
+  - unresolved_items

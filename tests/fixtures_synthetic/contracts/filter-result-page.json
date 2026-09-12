@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.1",
+  "items": [
+    {
+      "schema_version": "1.0",
+      "media_id": "22222222-2222-4222-8222-222222222222",
+      "account_id": "wxid_demo",
+      "file": {
+        "schema_version": "1.0",
+        "relative_path": "msg\\attach\\aabb\\1",
+        "byte_size": 4096,
+        "modified_time_ns": 123,
+        "sha256": null
+      },
+      "media_type": "image",
+      "observed_at": "2026-09-09T08:00:00Z",
+      "message_time": "2026-09-08T08:00:00Z",
+      "message_local_id": 99,
+      "mapping_confidence": "exact",
+      "mapping_reason": "synthetic database identity",
+      "record_key": "wxid_demo:msg-1",
+      "scan_id": "11111111-1111-4111-8111-111111111111",
+      "scan_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "file_status": "present",
+      "ownership_status": "mapped",
+      "protection_reasons": [],
+      "conflict_reasons": []
+    }
+  ],
+  "page_size": 50,
+  "next_cursor": null,
+  "summary": {
+    "schema_version": "1.1",
+    "total_count": 1,
+    "total_bytes": 4096,
+    "eligible_count": 1,
+    "eligible_bytes": 4096,
+    "excluded_count": 0,
+    "excluded_bytes": 0,
+    "by_media_type": [
+      {"schema_version": "1.1", "key": "image", "count": 1, "total_bytes": 4096}
+    ],
+    "by_confidence": [
+      {"schema_version": "1.1", "key": "exact", "count": 1, "total_bytes": 4096}
+    ],
+    "exclusion_reasons": [],
+    "filter_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
+}

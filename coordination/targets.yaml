@@ -1,0 +1,300 @@
+version: 3
+updated_at: 2026-09-09
+status_values: [planned, ready, in_progress, blocked, verification, done]
+targets:
+  - id: P0-GOV-01
+    title: Governance rules and planning loop
+    owner: orchestrator
+    status: done
+    risk: R1
+    depends_on: []
+    deliverables: [AGENTS.md, plan/TEMPLATE.md, plan/phase-0-governance.md]
+    acceptance: Append-only facts, explicit ownership, evidence-bearing handoff.
+  - id: P0-GOV-02
+    title: Agent roster and integration controls
+    owner: orchestrator
+    status: done
+    risk: R1
+    depends_on: [P0-GOV-01]
+    deliverables: [coordination/agents.yaml, coordination/integration-board.md]
+    acceptance: No overlapping write ownership; all phases have an integration gate.
+  - id: P0-GOV-03
+    title: Shared contract lock and compatibility governance
+    owner: orchestrator
+    status: done
+    risk: R1
+    depends_on: [P0-GOV-01]
+    deliverables: [coordination/contract-lock.yaml]
+    acceptance: Contract edits require named owner, expiry, migration, and consumer verification.
+  - id: P0-GOV-04
+    title: Private data and risk boundaries
+    owner: orchestrator
+    status: done
+    risk: R1
+    depends_on: [P0-GOV-01]
+    deliverables: [.gitignore, docs/data-and-license-boundaries.md, docs/risk-model.md]
+    acceptance: Private paths are ignored and R3/R4 safeguards are documented.
+  - id: P0-GOV-05
+    title: Local environment baseline
+    owner: orchestrator
+    status: done
+    risk: R1
+    depends_on: [P0-GOV-04]
+    deliverables: [docs/local-baseline-2026-09-09.md, coordination/fact-log.md]
+    acceptance: Records version, capacity and evidence scope without personal identifiers.
+  - id: P0-GOV-06
+    title: Reuse and license boundary
+    owner: orchestrator
+    status: done
+    risk: R1
+    depends_on: [P0-GOV-04]
+    deliverables: [docs/data-and-license-boundaries.md, docs/reuse-boundary.md]
+    acceptance: Candidate dependency has source, revision, license, and no-copy decision.
+  - id: P1-CONTRACT-01
+    title: Core account, contact, scan, media, decode and cleanup contracts
+    owner: contracts
+    status: done
+    risk: R1
+    depends_on: [P0-GOV-01, P0-GOV-03, P0-GOV-04]
+    deliverables: [contracts/, src/wechat_cleaner/domain/, tests/contract/]
+    acceptance: Versioned schemas, compatibility modes, error code rules and synthetic fixtures.
+  - id: P1-FIXTURE-01
+    title: Synthetic and private acceptance fixtures
+    owner: fixtures
+    status: done
+    risk: R1
+    depends_on: [P1-CONTRACT-01]
+    deliverables: [tests/fixtures_synthetic/, tests/fixtures_private.local.example/, tests/integration/, docs/compatibility/]
+    acceptance: Synthetic fixture is shareable; private Rec fixture remains ignored and manual only.
+  - id: P2-SCAN-01
+    title: Read-only WeChat filesystem scanner
+    owner: scanner
+    status: done
+    risk: R1
+    depends_on: [P1-CONTRACT-01, P1-FIXTURE-01]
+    deliverables: [src/wechat_cleaner/scanner/, tests/scanner/]
+    acceptance: Detect account roots, reject reparse traversal, and emit deterministic ScanManifest without writing WeChat paths.
+  - id: P2-DECODER-01
+    title: Bounded media decoder adapter
+    owner: decoder
+    status: done
+    risk: R2
+    depends_on: [P1-CONTRACT-01, P1-FIXTURE-01]
+    deliverables: [src/wechat_cleaner/decoder/, tests/decoder/]
+    acceptance: Decode only approved copies, enforce cache limits, validate output pixels, and never persist keys.
+  - id: P2-MAPPER-01
+    title: Database-to-contact media mapper
+    owner: mapper
+    status: done
+    risk: R2
+    depends_on: [P1-CONTRACT-01, P1-FIXTURE-01]
+    deliverables: [src/wechat_cleaner/mapper/, tests/mapper/]
+    acceptance: Produce confidence-scored MediaRecord mappings from database copies and refuse unsupported schemas.
+  - id: P2-CLEANUP-01
+    title: Cleanup planning and safety gate
+    owner: cleanup_safety
+    status: done
+    risk: R3
+    depends_on: [P1-CONTRACT-01, P1-FIXTURE-01]
+    deliverables: [src/wechat_cleaner/cleanup/, tests/cleanup/]
+    acceptance: Generate immutable plans, re-check identities, reject unsafe targets, and emit receipts without direct deletion.
+  - id: P2-UI-01
+    title: Read-only review and cache-control UI
+    owner: ui
+    status: done
+    risk: R1
+    depends_on: [P1-CONTRACT-01, P1-FIXTURE-01]
+    deliverables: [src/wechat_cleaner/ui/, tests/ui/]
+    acceptance: Present mappings, previews and cache actions without bypassing cleanup safety gates.
+  - id: P2-INTEGRATION-01
+    title: Cross-module integration and release evidence
+    owner: integration
+    status: done
+    risk: R1
+    depends_on: [P2-SCAN-01, P2-DECODER-01, P2-MAPPER-01, P2-CLEANUP-01, P2-UI-01]
+    deliverables: [tests/integration/, scripts/verify_integration.py]
+    acceptance: Run contract, fixture, path-boundary and failure-path checks with no private data leakage.
+  - id: P3-GOV-01
+    title: Phase 2 closeout and parallel-work baseline
+    owner: orchestrator
+    status: done
+    risk: R1
+    depends_on: [P2-INTEGRATION-01]
+    deliverables: [README.md, pyproject.toml, .gitignore, coordination/, plan/]
+    acceptance: Phase 2 state is consistent, fresh environment gate passes, and a user-attributed baseline commit exists before worktrees are created.
+  - id: P3-CONTRACT-01
+    title: Desktop, filtering, index and recoverable execution contracts
+    owner: contracts
+    status: done
+    risk: R2
+    depends_on: [P3-GOV-01]
+    deliverables: [contracts/, src/wechat_cleaner/domain/, tests/contract/]
+    acceptance: Versioned scan lineage, filter selection, database evidence and recovery contracts are consumer-reviewed and compatibility-tested.
+  - id: P3-FIXTURE-01
+    title: Desktop and database compatibility synthetic fixtures
+    owner: fixtures
+    status: done
+    risk: R1
+    depends_on: [P3-CONTRACT-01]
+    deliverables: [tests/fixtures_synthetic/, tests/fixtures_private.local.example/]
+    acceptance: Fixtures cover multiple accounts, contacts, dates, confidence levels, protected records and supported synthetic database versions.
+  - id: P3-INDEX-01
+    title: Private local metadata index and pagination
+    owner: local_index
+    status: done
+    risk: R2
+    depends_on: [P3-CONTRACT-01, P3-FIXTURE-01]
+    deliverables: [src/wechat_cleaner/local_index/, tests/local_index/]
+    acceptance: SQLite metadata index supports migration, pagination, aggregation and complete clearing without storing message bodies or keys.
+  - id: P3-DBADAPTER-01
+    title: Read-only decrypted database copy adapter
+    owner: wechat_db_adapter
+    status: done
+    risk: R2
+    depends_on: [P3-CONTRACT-01, P3-FIXTURE-01]
+    deliverables: [src/wechat_cleaner/db_adapter/, tests/db_adapter/]
+    acceptance: Adapter detects supported schema versions, reads copies only and emits structured evidence without message bodies.
+  - id: P3-FILTER-01
+    title: Precise filtering, retention and eligibility engine
+    owner: filter_engine
+    status: done
+    risk: R2
+    depends_on: [P3-CONTRACT-01, P3-FIXTURE-01]
+    deliverables: [src/wechat_cleaner/filtering/, tests/filtering/]
+    acceptance: Versioned filters produce deterministic paged results, summaries and immutable selections while excluding protected, low-confidence and unmapped records.
+  - id: P3-GUI-SHELL-01
+    title: PySide6 desktop shell with fake services
+    owner: gui_shell
+    status: done
+    risk: R1
+    depends_on: [P3-CONTRACT-01]
+    deliverables: [src/wechat_cleaner/gui/, tests/gui/]
+    acceptance: Offscreen tests cover navigation, tables, filters, progress and cancellation without blocking the GUI thread or touching files directly.
+  - id: P3-EXECUTOR-01
+    title: Recoverable cleanup executor for synthetic data
+    owner: cleanup_executor
+    status: done
+    risk: R3
+    depends_on: [P3-CONTRACT-01, P3-FIXTURE-01]
+    deliverables: [src/wechat_cleaner/executor/, tests/executor/]
+    acceptance: Dry run, quarantine and recycle-bin modes consume immutable plans, re-check identity and emit recovery-aware receipts; permanent delete remains absent.
+  - id: P3-WORKFLOW-01
+    title: Headless application workflow facade
+    owner: application_workflow
+    status: done
+    risk: R3
+    depends_on: [P3-INDEX-01, P3-DBADAPTER-01, P3-FILTER-01, P3-EXECUTOR-01]
+    deliverables: [src/wechat_cleaner/application/, tests/application/]
+    acceptance: One facade composes scan, mapping, index, filtering, planning and recoverable execution without exposing file mutation to the GUI.
+  - id: P3-GUI-FLOW-01
+    title: End-to-end desktop workflow wiring
+    owner: gui_shell
+    status: done
+    risk: R3
+    depends_on: [P3-GUI-SHELL-01, P3-WORKFLOW-01]
+    deliverables: [src/wechat_cleaner/gui/, tests/gui/]
+    acceptance: GUI supports exact selection scope, plan review, preflight, dry run and explicit confirmation exclusively through the application facade.
+  - id: P3-ENTRY-01
+    title: Desktop and legacy CLI entrypoints
+    owner: orchestrator
+    status: done
+    risk: R1
+    depends_on: [P3-GUI-FLOW-01]
+    deliverables: [pyproject.toml, src/wechat_cleaner/__main__.py, README.md]
+    acceptance: Default desktop launch and an explicit legacy CLI mode coexist and dependencies are reproducible in a fresh environment.
+  - id: P3-INTEGRATION-01
+    title: Phase 3 full synthetic integration gate
+    owner: integration
+    status: done
+    risk: R3
+    depends_on: [P3-ENTRY-01]
+    deliverables: [tests/integration/, scripts/verify_phase3.py, scripts/check_private_acceptance_readiness.py]
+    acceptance: AI completes the public and synthetic fresh-environment gate without opening private inputs, then emits a blocked or ready_for_human handoff state.
+  - id: P3-PRIVATE-ACCEPT-01
+    title: Human-led private read-only and recoverable acceptance
+    owner: human_operator
+    status: blocked
+    risk: R3
+    depends_on: [P3-INTEGRATION-01]
+    deliverables: [local-only acceptance evidence]
+    acceptance: Only the human operator runs read-only discovery, dry run and an explicitly selected tiny recoverable batch; AI stops after the readiness handoff and only aggregate results are recorded.
+  - id: P3-PACKAGE-01
+    title: Windows source and portable package
+    owner: packaging
+    status: planned
+    risk: R2
+    depends_on: [P3-PRIVATE-ACCEPT-01]
+    deliverables: [packaging/, tests/packaging/, dist/]
+    acceptance: Source and portable packages include license inventory, checksums, cache/index controls, migration notes and rollback instructions.
+  - id: P4-GOV-01
+    title: Phase 4 target registration and governance baseline
+    owner: orchestrator
+    status: done
+    risk: R1
+    depends_on: [P3-INTEGRATION-01]
+    deliverables: [coordination/targets.yaml, coordination/integration-board.md, coordination/path-ownership.yaml, coordination/phase-4-waves.yaml, coordination/phase-4-dispatch.md]
+    acceptance: Six P4 targets plus the human acceptance target are registered with owners, dependencies, gates and fact-ID ranges; new module paths have ownership rows.
+  - id: P4-REAL-MEDIAKEY-01
+    title: Real image key resolution probe (cfgDword derivation first)
+    owner: decoder
+    status: done
+    risk: R2
+    depends_on: [P3-INTEGRATION-01]
+    deliverables: [scripts/probe_real_media_key.py, plan/P4-REAL-MEDIAKEY-01-media-key-probe.md, tests/real_media/]
+    acceptance: Image AES/XOR keys derived from cfgDword validate against a real V2 .dat probe and one real image copy decodes to an openable image in a private session, with source files unchanged and no key persisted.
+  - id: P4-REAL-DB-01
+    title: Real WeChat encrypted database adapter
+    owner: wechat_db_adapter
+    status: done
+    risk: R2
+    depends_on: [P4-REAL-MEDIAKEY-01]
+    deliverables: [src/wechat_cleaner/real_db/, tests/real_db/]
+    acceptance: Discover accounts, extract and validate SQLCipher 4 keys read-only, decrypt to app cache only, emit versioned evidence without message bodies, and diagnose the 8 unkeyed databases.
+  - id: P4-REAL-MEDIA-01
+    title: Real media decoder adapter
+    owner: decoder
+    status: done
+    risk: R2
+    depends_on: [P4-REAL-MEDIAKEY-01]
+    deliverables: [src/wechat_cleaner/real_media/, tests/real_media/]
+    acceptance: v1/v2 image decryption or thumbnail-only status, SILK voice export, video/file read-only location, Pillow and magic verification, no key or absolute source path in artifacts, logs or index.
+  - id: P4-REAL-WORKFLOW-01
+    title: In-app real read-only workflow
+    owner: application_workflow
+    status: done
+    risk: R2
+    depends_on: [P4-REAL-DB-01, P4-REAL-MEDIA-01]
+    deliverables: [src/wechat_cleaner/application/, tests/application/]
+    acceptance: One in-app flow performs discovery, decryption, scan, mapping, index and preview with no manual copies, JSON or script steps; per-run session manifest supports whole-session cleanup; executor move and delete entries stay disabled.
+  - id: P4-REAL-GUI-01
+    title: Real read-only desktop shell
+    owner: gui_shell
+    status: done
+    risk: R2
+    depends_on: [P4-REAL-WORKFLOW-01]
+    deliverables: [src/wechat_cleaner/gui/, tests/gui/]
+    acceptance: First-run discovery wizard, account selection, contact/time/type/size filters, thumbnail and original preview with explicit failure reasons, cache settings and two-level cache clearing; no execution entry points.
+  - id: P4-REAL-INTEGRATION-01
+    title: Real read-only integration gate and private harness
+    owner: integration
+    status: done
+    risk: R2
+    depends_on: [P4-REAL-GUI-01]
+    deliverables: [tests/integration/, scripts/verify_p4.py, scripts/harness_real_readonly.py]
+    acceptance: Public CI stays synthetic-only; local harness reports only version, pass/fail, anonymous counts, bytes and error-code distribution; private acceptance proves inputs came from the real source directory.
+  - id: P4-PRIVATE-ACCEPT-01
+    title: Human-led real read-only acceptance
+    owner: human_operator
+    status: ready
+    risk: R2
+    depends_on: [P4-REAL-INTEGRATION-01]
+    deliverables: [local-only acceptance evidence]
+    acceptance: Only the human operator runs the seven private small-sample checks and approves aggregate results; AI stops after the readiness handoff.
+  - id: P4-REAL-PACKAGE-01
+    title: Windows read-only Beta package
+    owner: packaging
+    status: planned
+    risk: R2
+    depends_on: [P4-REAL-INTEGRATION-01, P4-PRIVATE-ACCEPT-01]
+    deliverables: [packaging/, tests/packaging/, dist/]
+    acceptance: Portable and installer artifacts carry the Apache-2.0 LICENSE, source revision and modification notice, verified on a Python-free clean Windows profile, cache in one app-owned root, no cleanup capability.

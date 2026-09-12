@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.1",
+  "total_count": 2,
+  "total_bytes": 6144,
+  "eligible_count": 1,
+  "eligible_bytes": 4096,
+  "excluded_count": 1,
+  "excluded_bytes": 2048,
+  "by_media_type": [
+    {"schema_version": "1.1", "key": "image", "count": 1, "total_bytes": 4096},
+    {"schema_version": "1.1", "key": "video", "count": 1, "total_bytes": 2048}
+  ],
+  "by_confidence": [
+    {"schema_version": "1.1", "key": "exact", "count": 1, "total_bytes": 4096},
+    {"schema_version": "1.1", "key": "low", "count": 1, "total_bytes": 2048}
+  ],
+  "exclusion_reasons": [
+    {"schema_version": "1.1", "key": "low_confidence", "count": 1, "total_bytes": 2048}
+  ],
+  "filter_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+}

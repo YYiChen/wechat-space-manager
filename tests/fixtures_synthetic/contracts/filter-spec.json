@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.1",
+  "spec_id": "33333333-3333-4333-8333-333333333333",
+  "account_ids": ["wxid_demo"],
+  "contact_ids": ["wxid_contact"],
+  "media_types": ["image"],
+  "mapping_confidences": ["exact", "high"],
+  "file_statuses": ["present"],
+  "ownership_statuses": ["mapped"],
+  "message_time_from": "2026-01-01T00:00:00Z",
+  "message_time_to": "2026-12-31T23:59:59Z",
+  "observed_time_from": null,
+  "observed_time_to": null,
+  "min_bytes": 1024,
+  "max_bytes": 1048576,
+  "include_protected": false,
+  "include_conflicts": false,
+  "include_unmapped": false,
+  "sort_by": "bytes",
+  "descending": true,
+  "page_size": 50
+}

@@ -1,0 +1,69 @@
+version: 2
+updated_at: 2026-09-09
+policy:
+  scope: contracts/** and every public serialized payload crossing module boundaries
+  acquisition: Owner marks a lock active before editing and names consumers, compatibility strategy, and expiry.
+  release: Integration verification recorded in fact-log and integration-board; owner then clears active.
+  stale_lock: Locks expire after one working day and must be renewed or released by orchestrator.
+  emergency: No emergency contract change is permitted for R3/R4 behavior; create a new compatible version instead.
+locks:
+  - contract: AccountRef
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [scanner, mapper, ui, cleanup_safety, wechat_db_adapter, application_workflow]
+    compatibility: v1_contract_tested
+  - contract: ContactRef
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [mapper, ui, cleanup_safety, wechat_db_adapter, filter_engine, gui_shell, application_workflow]
+    compatibility: v1_contract_tested
+  - contract: ScanManifest
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [scanner, mapper, ui, cleanup_safety, local_index, filter_engine, application_workflow]
+    compatibility: v1_contract_tested
+  - contract: MediaRecord
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [scanner, decoder, mapper, ui, cleanup_safety, local_index, filter_engine, gui_shell, application_workflow]
+    compatibility: v1_contract_tested
+  - contract: DecodeRequestAndArtifact
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [decoder, ui, gui_shell, application_workflow]
+    compatibility: v1_contract_tested
+  - contract: CleanupPlanAndReceipt
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [cleanup_safety, ui, cleanup_executor, gui_shell, application_workflow, integration]
+    compatibility: v1_contract_tested
+  - contract: MediaRecordAndScanLineage
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [scanner, mapper, local_index, filter_engine, cleanup_safety, cleanup_executor, application_workflow]
+    compatibility: backward_compatible_v1_1_tested
+  - contract: FilterSpecSelectionAndSummary
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [local_index, filter_engine, gui_shell, application_workflow]
+    compatibility: v1_1_tested
+  - contract: CleanupExecutionAndRecovery
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [cleanup_safety, cleanup_executor, gui_shell, application_workflow, integration]
+    compatibility: backward_compatible_v1_1_tested
+  - contract: DatabaseEvidenceEnvelope
+    active: false
+    owner: null
+    expires_at: null
+    consumers: [mapper, wechat_db_adapter, local_index, application_workflow]
+    compatibility: v1_1_tested

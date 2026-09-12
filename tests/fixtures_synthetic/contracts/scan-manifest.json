@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "scan_id": "5b7e721f-70a1-4706-b7f1-5899c9cf3021",
+  "account": {
+    "schema_version": "1.0",
+    "account_id": "wxid_demo",
+    "account_root": "D:\\xwechat_files\\wxid_demo",
+    "display_name": "Synthetic Demo"
+  },
+  "scanned_at": "2026-09-09T08:00:00Z",
+  "scanner_version": "0.1.0",
+  "indexed_roots": ["msg\\attach", "msg\\file"],
+  "file_count": 2,
+  "total_bytes": 8192,
+  "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "errors": []
+}

@@ -1,0 +1,42 @@
+version: 1
+updated_at: 2026-09-10
+max_active_agents_including_orchestrator: 4
+dispatch_rules:
+  - Dispatch only targets whose dependencies are done and whose owner has an isolated worktree.
+  - One agent claims one target and only its owned paths; the orchestrator alone updates shared files.
+  - Real-data probes always run in a fresh private session root; no key, body, wxid or media content is written to Git.
+  - Integration reports failures to owners and never repairs business modules.
+waves:
+  - id: W0
+    mode: serial
+    targets: [P4-GOV-01]
+    exit_gate: Six P4 targets plus the human target are registered; owned paths for new modules exist.
+  - id: W1
+    mode: serial
+    targets: [P4-REAL-MEDIAKEY-01]
+    exit_gate: Image AES/XOR keys derived from cfgDword validate against a real V2 probe and one real image decodes to an openable file; source unchanged; no key persisted.
+  - id: W2
+    mode: parallel
+    targets: [P4-REAL-DB-01, P4-REAL-MEDIA-01]
+    exit_gate: Database gate (including the 8 unkeyed databases diagnosis) and media gate both pass.
+  - id: W3
+    mode: serial
+    targets: [P4-REAL-WORKFLOW-01]
+    exit_gate: One in-app flow completes discovery to preview with no manual inputs.
+  - id: W4
+    mode: serial
+    targets: [P4-REAL-GUI-01]
+    exit_gate: Wizard, account selection, four-way filters, preview with failure reasons and two-level cache clearing work.
+  - id: W5
+    mode: serial
+    targets: [P4-REAL-INTEGRATION-01]
+    exit_gate: Public synthetic gate returns zero without opening private inputs; local harness emits anonymous aggregates only.
+  - id: W6
+    mode: human_serial
+    targets: [P4-PRIVATE-ACCEPT-01]
+    entry_gate: AI emits ready_for_human and stops.
+    exit_gate: Human operator approves the seven private small-sample checks.
+  - id: W7
+    mode: serial
+    targets: [P4-REAL-PACKAGE-01]
+    exit_gate: Clean Windows profile install, discovery, database read, filtering and preview pass; license complete; no delete entry.

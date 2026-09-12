@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "media_id": "b5f8943c-4f50-4e30-843e-82b66f505cb9",
+  "account_id": "wxid_demo",
+  "file": {
+    "schema_version": "1.0",
+    "relative_path": "msg\\attach\\aabb\\1",
+    "byte_size": 4096,
+    "modified_time_ns": 123,
+    "sha256": null
+  },
+  "media_type": "image",
+  "observed_at": "2026-09-09T08:00:00Z",
+  "contact": {
+    "schema_version": "1.0",
+    "account_id": "wxid_demo",
+    "contact_id": "wxid_contact",
+    "kind": "direct",
+    "session_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "display_name": "Synthetic Contact",
+    "remark": null
+  },
+  "message_local_id": 99,
+  "mapping_confidence": "exact",
+  "mapping_reason": "database local_id and media identity agree",
+  "original_media_id": null,
+  "is_regenerable_cache": false
+}

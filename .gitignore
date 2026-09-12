@@ -1,0 +1,66 @@
+# Python/build artifacts
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+dist/
+build/
+# NOTE: the hand-written PyInstaller spec (packaging/wechat-space-manager.spec)
+# is part of the source and IS tracked; only ignore generated specs elsewhere.
+*.spec
+!packaging/*.spec
+.venv/
+.venv.broken-*/
+venv/
+
+# Local application state and reproducible caches
+.wechat-space-manager/
+.cache/
+cache/
+recovery/
+logs/
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Private WeChat material: never commit or attach
+private/
+fixtures/private/
+fixtures/real/
+tests/fixtures_private.local/
+!tests/fixtures_private.local.example/
+**/xwechat_files/
+**/all_users/
+**/db_storage/
+**/key_info.db
+**/*key*.json
+**/*key*.txt
+**/*key*.bin
+**/*.dmp
+**/*.dat
+**/*.datx
+**/*.wxgf
+**/Memory.dmp
+
+# Decrypted/exported media and local evidence
+decoded/
+exports/
+screenshots/private/
+receipts/
+*.cleanup-plan.json
+*.cleanup-receipt.json
+
+# OS/editor secrets
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini

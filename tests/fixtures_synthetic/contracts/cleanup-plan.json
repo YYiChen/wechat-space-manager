@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "baf5483c-2487-4cf6-8d65-53a948555ee4",
+  "created_at": "2026-09-09T08:00:00Z",
+  "account": {
+    "schema_version": "1.0",
+    "account_id": "wxid_demo",
+    "account_root": "D:\\xwechat_files\\wxid_demo",
+    "display_name": "Synthetic Demo",
+    "source_version": null
+  },
+  "disposition": "recycle_bin",
+  "targets": [
+    {
+      "schema_version": "1.0",
+      "target_id": "1c6fa018-5af8-4b94-84db-6a7f52fb07ee",
+      "media_id": "b5f8943c-4f50-4e30-843e-82b66f505cb9",
+      "account_id": "wxid_demo",
+      "file": {
+        "schema_version": "1.0",
+        "relative_path": "msg\\attach\\aabb\\1",
+        "byte_size": 4096,
+        "modified_time_ns": 123,
+        "sha256": null
+      },
+      "media_type": "image",
+      "mapping_confidence": "exact",
+      "reason": "synthetic user-selected image"
+    }
+  ],
+  "summary": {
+    "schema_version": "1.0",
+    "target_count": 1,
+    "expected_reclaim_bytes": 4096,
+    "by_media_type": [["image", 4096]],
+    "includes_regenerable_cache": false
+  },
+  "policy": {
+    "schema_version": "1.0",
+    "mode": "strict",
+    "accepted_schema_versions": ["1.0"],
+    "allow_mutation": false
+  },
+  "acknowledged_risk": false
+}

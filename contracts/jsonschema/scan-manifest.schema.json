@@ -1,0 +1,212 @@
+{
+  "$defs": {
+    "AccountRef": {
+      "additionalProperties": false,
+      "description": "A WeChat account and its authoritative filesystem boundary.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "account_id": {
+          "maxLength": 128,
+          "minLength": 3,
+          "pattern": "^[A-Za-z0-9_@.-]+$",
+          "title": "Account Id",
+          "type": "string"
+        },
+        "account_root": {
+          "maxLength": 1024,
+          "minLength": 3,
+          "title": "Account Root",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Version"
+        }
+      },
+      "required": [
+        "account_id",
+        "account_root"
+      ],
+      "title": "AccountRef",
+      "type": "object"
+    },
+    "ContractError": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "examples": [
+            "1.0"
+          ],
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "code": {
+          "$ref": "#/$defs/ContractErrorCode"
+        },
+        "message": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "context": {
+          "default": [],
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Context",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ContractError",
+      "type": "object"
+    },
+    "ContractErrorCode": {
+      "enum": [
+        "SCHEMA_VERSION_UNSUPPORTED",
+        "INVALID_PATH",
+        "PATH_OUTSIDE_ACCOUNT_ROOT",
+        "FILE_IDENTITY_MISMATCH",
+        "ACCOUNT_MISMATCH",
+        "MAPPING_UNAVAILABLE",
+        "DECODER_UNAVAILABLE",
+        "DECODE_FAILED",
+        "CACHE_LIMIT_EXCEEDED",
+        "WECHAT_RUNNING",
+        "PLAN_INVALID",
+        "PLAN_STALE",
+        "EXECUTION_BLOCKED",
+        "UNKNOWN"
+      ],
+      "title": "ContractErrorCode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "examples": [
+        "1.0"
+      ],
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scan_id": {
+      "format": "uuid",
+      "title": "Scan Id",
+      "type": "string"
+    },
+    "account": {
+      "$ref": "#/$defs/AccountRef"
+    },
+    "scanned_at": {
+      "format": "date-time",
+      "title": "Scanned At",
+      "type": "string"
+    },
+    "scanner_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Scanner Version",
+      "type": "string"
+    },
+    "indexed_roots": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Indexed Roots",
+      "type": "array"
+    },
+    "file_count": {
+      "minimum": 0,
+      "title": "File Count",
+      "type": "integer"
+    },
+    "total_bytes": {
+      "minimum": 0,
+      "title": "Total Bytes",
+      "type": "integer"
+    },
+    "manifest_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Manifest Sha256"
+    },
+    "errors": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ContractError"
+      },
+      "title": "Errors",
+      "type": "array"
+    }
+  },
+  "required": [
+    "account",
+    "scanner_version",
+    "file_count",
+    "total_bytes"
+  ],
+  "title": "ScanManifest",
+  "type": "object",
+  "$id": "https://wechat-space-manager.local/schema/scan-manifest/1.0.json"
+}
