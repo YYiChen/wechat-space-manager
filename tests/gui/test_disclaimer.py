@@ -105,3 +105,14 @@ def test_corrupt_settings_reads_as_not_accepted(qtbot, isolated_settings):
     settings_path().write_text("{not json", encoding="utf-8")
 
     assert is_disclaimer_accepted() is False
+
+
+def test_boundary_text_names_the_release_it_belongs_to():
+    """弹窗文本必须写明版本：用户确认的是哪个版本应一目了然。
+
+    版本号在文本里，编辑文本就要按模块约定递增 DISCLAIMER_VERSION，
+    否则改动会被静默吞掉（用户看不到新文案）。
+    """
+    assert disclaimer.APP_VERSION in disclaimer.BOUNDARY_TEXT
+    assert disclaimer.APP_VERSION.startswith("v")
+    assert disclaimer.DISCLAIMER_VERSION >= 4

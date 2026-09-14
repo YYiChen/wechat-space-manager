@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -57,6 +58,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QStatusBar,
     QVBoxLayout,
@@ -67,6 +69,7 @@ from wechat_cleaner.domain.contracts import MediaRecord, MediaType
 from wechat_cleaner.real_db import is_merged_forward, session_dir_of
 
 from .data_root import find_data_root
+from .disclaimer import APP_VERSION
 from .gallery import (
     _THUMB_BOX,
     THUMB_DECODE_EDGE,
@@ -640,7 +643,7 @@ class RealReadOnlyWindow(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             app.aboutToQuit.connect(self._shutdown_worker)
-        self.setWindowTitle("微信空间管理器（只读相册）")
+        self.setWindowTitle(f"微信空间管理器（只读相册）{APP_VERSION}")
         icon_file = _app_icon_file()
         if icon_file is not None:
             self.setWindowIcon(QIcon(str(icon_file)))
@@ -656,7 +659,11 @@ class RealReadOnlyWindow(QMainWindow):
 
         layout.addWidget(self._wizard_group())
         layout.addWidget(self._filter_group())
-        layout.addLayout(self._middle_row())
+        # The album row is the only part that should grow with the window: the
+        # header groups and the cache strip keep their natural height, so extra
+        # vertical space goes to the grid and the preview pane instead of being
+        # spread across the group boxes.
+        layout.addLayout(self._middle_row(), 1)
         layout.addWidget(self._cache_group())
 
         self.read_only_label = QLabel(READ_ONLY_NOTICE)
@@ -665,6 +672,12 @@ class RealReadOnlyWindow(QMainWindow):
         layout.addWidget(self.read_only_label)
 
         self.setCentralWidget(central)
+        # A deliberate, modest floor.  Without one the layout's own minimum won
+        # (measured: 1129px tall - taller than the screen's 1019px usable
+        # height), so the window could not be made shorter than the content and
+        # maximising it silently clipped whatever did not fit.  Anything that
+        # does not fit now scrolls inside its own column instead.
+        self.setMinimumSize(860, 560)
         self.setStatusBar(QStatusBar())
         # Indeterminate-capable progress bar parked on the right of the status
         # bar.  Pulse (range 0,0) for steps with no observable completion
@@ -827,7 +840,31 @@ class RealReadOnlyWindow(QMainWindow):
         row.addWidget(self.records_table, 3)
 
         preview_group = QGroupBox("③ 预览与管理")
-        preview_layout = QVBoxLayout(preview_group)
+        preview_outer = QVBoxLayout(preview_group)
+        preview_outer.setContentsMargins(6, 6, 6, 6)
+        # The action stack is tall: the picture pane plus eight buttons used to
+        # demand 716px on its own, so on a laptop screen the last rows (导出 /
+        # 批量导出…) fell below the visible area and could not be reached at
+        # all.  A scroll area inside the column keeps every button reachable
+        # while the picture pane stays the flexible part.
+        preview_scroll = QScrollArea()
+        preview_scroll.setWidgetResizable(True)
+        preview_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        # Both axes as-needed: the column can be squeezed narrower than its
+        # widest button (the window minimum is deliberately small), and an
+        # unreachable control must never be the price of a flexible window.
+        preview_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        preview_body = QWidget()
+        preview_layout = QVBoxLayout(preview_body)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        # Tight rows: eleven stacked controls at the default spacing spent
+        # ~90px on gaps alone, which is exactly the margin a 768-tall laptop
+        # screen does not have.
+        preview_layout.setSpacing(4)
+        preview_scroll.setWidget(preview_body)
+        preview_outer.addWidget(preview_scroll)
 
         self.selection_label = _StableHintLabel("未选择照片")
         preview_layout.addWidget(self.selection_label)
@@ -846,7 +883,9 @@ class RealReadOnlyWindow(QMainWindow):
             "兼顾清晰与速度。\n缩略图/原图则固定使用对应版本。"
         )
         self.preview_label = _ImagePane("未选择照片")
-        self.preview_label.setMinimumSize(380, 320)
+        # Small enough that the column never forces the window taller than a
+        # laptop screen; the picture is letterboxed to whatever it is given.
+        self.preview_label.setMinimumSize(240, 170)
         self.preview_label.setStyleSheet("border: 1px solid #bbb; background: #fafafa;")
         self.preview_status = _StableHintLabel("")
 

@@ -26,6 +26,46 @@ import os
 import sys
 
 
+def _clipped_buttons(window) -> list[str]:
+    """Labels of visible buttons the user cannot reach.
+
+    A control is fine when it sits inside the visible central widget, or when
+    the axis it overflows on belongs to a scrollable column.  Anything else is
+    the "buttons vanished below the fold" bug (measured cause: the window's own
+    minimum height exceeded the screen).
+    """
+    from PySide6.QtWidgets import QAbstractButton, QScrollArea
+
+    central = window.centralWidget()
+    clipped: list[str] = []
+    for button in window.findChildren(QAbstractButton):
+        if not button.isVisible():
+            continue
+        top_left = button.mapTo(central, button.rect().topLeft())
+        right = top_left.x() + button.width()
+        bottom = top_left.y() + button.height()
+        overflow_v = top_left.y() < -1 or bottom > central.height() + 1
+        overflow_h = top_left.x() < -1 or right > central.width() + 1
+        if not (overflow_v or overflow_h):
+            continue
+        node = button.parentWidget()
+        area = None
+        while node is not None:
+            if isinstance(node, QScrollArea):
+                area = node
+                break
+            node = node.parentWidget()
+        if area is None:
+            clipped.append(button.text())
+            continue
+        if overflow_v and area.verticalScrollBar().maximum() <= 0:
+            clipped.append(button.text())
+            continue
+        if overflow_h and area.horizontalScrollBar().maximum() <= 0:
+            clipped.append(button.text())
+    return clipped
+
+
 def _self_test() -> int:
     """Open the read-only window offscreen and report its interactive surface."""
     import json
@@ -44,7 +84,21 @@ def _self_test() -> int:
         report["title"] = window.windowTitle()
         report["visible"] = window.isVisible()
         report["buttons"] = [b.text() for b in window.findChildren(QAbstractButton)]
-        report["ok"] = True
+        # Layout contract (F-20260914): the window must be shrinkable, and no
+        # control may sit outside the visible area without a scrollable column
+        # to reach it.  Both were broken when the preview column's own minimum
+        # (716px) pushed the window minimum past the screen height.
+        minimum = window.minimumSizeHint()
+        report["minimum_size"] = [minimum.width(), minimum.height()]
+        window.resize(1024, 640)
+        app.processEvents()
+        report["resized_to"] = [window.width(), window.height()]
+        report["clipped_buttons"] = _clipped_buttons(window)
+        report["ok"] = (
+            minimum.height() <= 700
+            and report["resized_to"][1] == 640
+            and not report["clipped_buttons"]
+        )
         app.quit()
 
     window.show()

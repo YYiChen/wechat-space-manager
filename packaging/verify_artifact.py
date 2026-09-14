@@ -161,6 +161,26 @@ def verify(artifact: Path) -> tuple[bool, dict]:
     details["title"] = report.get("title", "")
     buttons = report.get("buttons", [])
     details["buttons"] = buttons
+    details["minimum_size"] = report.get("minimum_size")
+    details["resized_to"] = report.get("resized_to")
+    details["clipped_buttons"] = report.get("clipped_buttons")
+
+    # Layout contract: the frozen window must be shrinkable and must not hide
+    # its own controls.  Checked explicitly here as well as in the self-test so
+    # a regression names the failing fact instead of a bare "ok: false".
+    minimum_size = report.get("minimum_size") or [0, 0]
+    if minimum_size[1] > 700:
+        failures.append(
+            f"window minimum height is {minimum_size[1]}px: vertical resize is blocked"
+        )
+    resized_to = report.get("resized_to") or [0, 0]
+    if resized_to[1] != 640:
+        failures.append(
+            f"resize to 640px was clamped to {resized_to[1]}px: vertical resize is blocked"
+        )
+    clipped = report.get("clipped_buttons") or []
+    if clipped:
+        failures.append(f"controls unreachable at a small window size: {clipped}")
 
     for label in buttons:
         for forbidden in FORBIDDEN_LABELS:
@@ -209,6 +229,9 @@ def main(argv: list[str] | None = None) -> int:
         details = result.get("details", {})
         print(f"[package-verify] exe bytes: {details.get('exe_bytes', 'n/a')}")
         print(f"[package-verify] window title: {details.get('title', 'n/a')}")
+        print(f"[package-verify] window minimum: {details.get('minimum_size', 'n/a')}")
+        print(f"[package-verify] resized to 1024x640 -> {details.get('resized_to', 'n/a')}")
+        print(f"[package-verify] unreachable controls: {details.get('clipped_buttons', 'n/a')}")
         print(f"[package-verify] buttons: {details.get('buttons', [])}")
         if result["failures"]:
             print("[package-verify] FAILED:")

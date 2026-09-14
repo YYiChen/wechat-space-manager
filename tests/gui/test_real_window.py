@@ -2039,3 +2039,102 @@ def test_open_picture_opens_its_decrypted_preview(qtbot, records, monkeypatch):
     assert len(launched) == 1
     assert launched[0].endswith(".png")
     assert "已用系统应用打开" in window.statusBar().currentMessage()
+
+
+# ----------------------------------------------------------------------
+# window geometry: it must be resizable and never clip its own controls
+# ----------------------------------------------------------------------
+def _scroll_ancestor(widget):
+    node = widget.parentWidget()
+    while node is not None:
+        if node.__class__.__name__ == "QScrollArea":
+            return node
+        node = node.parentWidget()
+    return None
+
+
+def test_window_can_be_made_short_and_small(qtbot, records):
+    """竖向必须能缩：窗口最小高度不能再被内容撑到屏幕装不下。
+
+    回归：预览列的按钮栈 + 320px 预览图曾把最小高度顶到 1129px（> 屏幕可用
+    1019px），于是竖向根本拉不动，最大化还会把底部按钮切掉。
+    """
+    window = _window(qtbot, records)
+    window.show()
+    qtbot.addWidget(window)
+
+    minimum = window.minimumSizeHint().height()
+    assert minimum <= 680, f"窗口最小高度仍然过高：{minimum}px"
+
+    for size in ((1366, 768), (1280, 720), (1024, 640)):
+        window.resize(*size)
+        qtbot.wait(10)
+        assert (window.width(), window.height()) == size, (
+            f"请求 {size} 却得到 {window.width()}x{window.height()}：竖向被最小高度卡住"
+        )
+
+
+def test_every_action_button_is_reachable_at_small_sizes(qtbot, records):
+    """任何窗口尺寸下，导出/回收站这些按钮都不能"找不到"。"""
+    window = _window(qtbot, records)
+    window.show()
+    qtbot.addWidget(window)
+
+    buttons = [
+        window.preview_button,
+        window.recycle_button,
+        window.export_button,
+        window.export_recycle_button,
+        window.batch_export_button,
+        window.batch_recycle_button,
+        window.batch_export_recycle_button,
+    ]
+    for size in ((1366, 768), (1024, 640)):
+        window.resize(*size)
+        qtbot.wait(10)
+        central = window.centralWidget()
+        for button in buttons:
+            top = button.mapTo(central, button.rect().topLeft())
+            bottom = top.y() + button.height()
+            if -1 <= top.y() and bottom <= central.height() + 1:
+                continue
+            area = _scroll_ancestor(button)
+            assert area is not None, (
+                f"{button.text()!r} 在 {size} 下既不在可见区域、也没有可滚动的父容器"
+            )
+            assert area.verticalScrollBar().maximum() > 0, (
+                f"{button.text()!r} 在 {size} 下被裁掉且无法滚动到"
+            )
+
+
+def test_preview_pane_can_shrink(qtbot, records):
+    """预览图面板的最小高度要保持小巧，否则又会把窗口顶高。"""
+    window = _window(qtbot, records)
+
+    assert window.preview_label.minimumHeight() <= 200
+    assert window.preview_label.minimumWidth() <= 280
+
+
+def test_preview_column_scrolls_instead_of_clipping(qtbot, records):
+    """预览列自带滚动容器：小窗口下按钮靠滚动可达，而不是消失在窗口外。"""
+    window = _window(qtbot, records)
+    window.show()
+    qtbot.addWidget(window)
+
+    area = _scroll_ancestor(window.batch_export_recycle_button)
+
+    assert area is not None, "预览列应放在滚动容器里"
+    assert area.widgetResizable() is True
+    window.resize(1024, 640)
+    qtbot.wait(10)
+    assert area.verticalScrollBar().maximum() > 0
+
+
+def test_window_title_carries_the_release_version(qtbot, records):
+    """标题栏要能看出跑的是哪个版本（用户报 bug 时就靠这个对齐）。"""
+    from wechat_cleaner.gui.disclaimer import APP_VERSION
+
+    window = _window(qtbot, records)
+
+    assert APP_VERSION.startswith("v")
+    assert APP_VERSION in window.windowTitle()

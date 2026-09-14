@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 
 __all__ = [
+    "APP_VERSION",
     "DISCLAIMER_VERSION",
     "SKIP_ENV_VAR",
     "ensure_disclaimer_accepted",
@@ -28,14 +29,14 @@ __all__ = [
     "remember_disclaimer_accepted",
 ]
 
-DISCLAIMER_VERSION = 3
+DISCLAIMER_VERSION = 4
 _SETTINGS_KEY = "disclaimer_accepted_version"
 SKIP_ENV_VAR = "WCSM_SKIP_DISCLAIMER"
 
-APP_VERSION = "v0.1.3"
+APP_VERSION = "v0.1.4"
 
 BOUNDARY_TITLE = "使用前请了解本软件能做什么"
-BOUNDARY_TEXT = """微信空间管理器（只读相册版）v0.1.3
+BOUNDARY_TEXT = """微信空间管理器（只读相册版）v0.1.4
 
 【它会做的】
 • 读取你电脑上的微信数据，在本机生成相册、筛选和预览
