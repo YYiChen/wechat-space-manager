@@ -29,19 +29,20 @@ __all__ = [
     "remember_disclaimer_accepted",
 ]
 
-DISCLAIMER_VERSION = 4
+DISCLAIMER_VERSION = 5
 _SETTINGS_KEY = "disclaimer_accepted_version"
 SKIP_ENV_VAR = "WCSM_SKIP_DISCLAIMER"
 
-APP_VERSION = "v0.1.4"
+APP_VERSION = "v0.1.5"
 
 BOUNDARY_TITLE = "使用前请了解本软件能做什么"
-BOUNDARY_TEXT = """微信空间管理器（只读相册版）v0.1.4
+BOUNDARY_TEXT = """微信空间管理器（只读相册版）v0.1.5
 
 【它会做的】
 • 读取你电脑上的微信数据，在本机生成相册、筛选和预览
 • 经你每次确认后，把选中的照片/视频移出微信目录、送进"系统回收站"（可在回收站还原）
 • 把解密后的原图导出到"你指定的文件夹"
+• 把扫描范围聚焦到某一个文件夹，只解析它；对同名/重复文件做只读检测与 MD5 比对，用黄/橙/红提示
 
 【它不会做的】
 • 不改写任何文件的内容物，不碰聊天数据库和收藏
