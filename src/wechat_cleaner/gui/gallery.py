@@ -109,10 +109,26 @@ MEDIA_TYPE_ROLE = Qt.UserRole + 1
 THUMB_STATE_ROLE = Qt.UserRole + 2
 COVER_LABEL_ROLE = Qt.UserRole + 3
 COVER_EXT_ROLE = Qt.UserRole + 4
+# Duplicate-detection signal (ITER-20261010): "S1" normalized-name match
+# (yellow), "S2" + same size (orange), "S3" MD5-verified identical (red).
+# ``None`` for unique records.
+DUPLICATE_LEVEL_ROLE = Qt.UserRole + 5
 THUMB_READY = "ready"
 THUMB_PENDING = "pending"
 THUMB_FAILED = "failed"
 THUMB_NONE = "none"
+
+# Duplicate-warning colours, light-theme friendly.  The frame edge carries the
+# signal (yellow < orange < red); the red verdict additionally marks the
+# caption strip so "provably the same file" reads instantly in a wall of tiles.
+DUPLICATE_FRAME_COLORS = {
+    "S1": QColor(0xE6, 0xB8, 0x00),   # yellow: same normalized name
+    "S2": QColor(0xE6, 0x7E, 0x22),   # orange: same name and same size
+    "S3": QColor(0xD9, 0x30, 0x25),   # red: MD5-verified identical content
+}
+DUPLICATE_CAPTION_COLORS = {
+    "S3": QColor(0xD9, 0x30, 0x25),
+}
 
 _TYPE_GLYPHS = {
     MediaType.IMAGE.value: "",
@@ -480,14 +496,22 @@ class MediaCellDelegate(QStyledItemDelegate):
             self._box,
         )
         # A neutral frame behind the picture so letterboxed edges read as part
-        # of the tile instead of as a hole in the sheet.
-        painter.setPen(
-            QPen(palette.color(QPalette.ColorRole.Highlight), 2)
-            if hovered and not selected
-            else QPen(palette.color(QPalette.ColorRole.Mid), 1)
-        )
+        # of the tile instead of as a hole in the sheet.  A duplicate signal
+        # recolours the frame (yellow/orange/red) and adds a corner dot, so a
+        # wall of tiles still shows the warning at a glance.
+        duplicate_level = index.data(DUPLICATE_LEVEL_ROLE)
+        if duplicate_level in DUPLICATE_FRAME_COLORS:
+            painter.setPen(QPen(DUPLICATE_FRAME_COLORS[duplicate_level], 2))
+        elif hovered and not selected:
+            painter.setPen(QPen(palette.color(QPalette.ColorRole.Highlight), 2))
+        else:
+            painter.setPen(QPen(palette.color(QPalette.ColorRole.Mid), 1))
         painter.setBrush(palette.color(QPalette.ColorRole.AlternateBase))
         painter.drawRoundedRect(box.adjusted(0, 0, -1, -1), 4, 4)
+        if duplicate_level in DUPLICATE_FRAME_COLORS:
+            self._paint_duplicate_dot(
+                painter, box, DUPLICATE_FRAME_COLORS[duplicate_level]
+            )
 
         pixmap = index.data(Qt.ItemDataRole.DecorationRole)
         if isinstance(pixmap, QPixmap) and not pixmap.isNull():
@@ -711,6 +735,18 @@ class MediaCellDelegate(QStyledItemDelegate):
         painter.drawText(badge, int(Qt.AlignmentFlag.AlignCenter), glyph)
         _ = palette  # badge colours are deliberately theme-independent
 
+    def _paint_duplicate_dot(self, painter, box: QRect, color: QColor) -> None:
+        """A small corner dot mirroring the frame colour of a duplicate hit.
+
+        The frame edge alone can fade against busy thumbnails; the dot keeps
+        the warning readable at every zoom step.  Deliberately theme-
+        independent: a warning is a warning in light and dark mode alike.
+        """
+        dot = QRect(box.right() - 12, box.top() + 4, 8, 8)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color)
+        painter.drawEllipse(dot)
+
     def _paint_caption(self, painter, option, box: QRect, selected: bool, index) -> None:
         """Two elided, centred lines below the frame - never over it."""
         caption = QRect(
@@ -732,6 +768,15 @@ class MediaCellDelegate(QStyledItemDelegate):
         else:
             title_color = palette.color(QPalette.ColorRole.Text)
             subtitle_color = palette.color(QPalette.ColorRole.PlaceholderText)
+        # An MD5-verified duplicate (S3) additionally tints the caption strip:
+        # "provably the same file" must survive a quick scroll through the grid.
+        duplicate_level = index.data(DUPLICATE_LEVEL_ROLE)
+        if duplicate_level in DUPLICATE_CAPTION_COLORS and not selected:
+            painter.setPen(Qt.PenStyle.NoPen)
+            tint = QColor(DUPLICATE_CAPTION_COLORS[duplicate_level])
+            tint.setAlpha(38)
+            painter.setBrush(tint)
+            painter.drawRoundedRect(caption.adjusted(-2, -2, 2, 2), 3, 3)
 
         title_metrics = QFontMetrics(title_font)
         title_rect = QRect(
@@ -781,6 +826,10 @@ class MediaGridModel(QAbstractListModel):
         self._failed: set[str] = set()
         # media id -> row, so a decode result does not scan 100k records.
         self._row_by_id: dict[str, int] = {}
+        # media id -> duplicate level ("S1"/"S2"/"S3"), from the window's
+        # duplicate index (ITER-20261010).  Only members of a duplicate group
+        # appear here; unique records stay absent so the cell paints plainly.
+        self._duplicate_levels: dict[str, str] = {}
 
     # -- data -----------------------------------------------------------
     def set_records(self, records) -> None:
@@ -794,12 +843,29 @@ class MediaGridModel(QAbstractListModel):
         self._row_by_id = {
             str(record.media_id): row for row, record in enumerate(records)
         }
+        # New records carry new media ids; stale duplicate signals would be
+        # dead entries.  The window recomputes and pushes them right back.
+        self._duplicate_levels = {}
         # Keep decoded thumbnails across a re-filter: they are keyed by media
         # id and the same photo is often still on screen after narrowing.
         self.endResetModel()
 
     def records(self) -> tuple[MediaRecord, ...]:
         return self._records
+
+    def set_duplicate_levels(self, levels: dict[str, str]) -> None:
+        """Replace the per-record duplicate signals and repaint the grid.
+
+        Called after load/verify; a pure dict swap plus one dataChanged sweep,
+        so no model reset happens and scroll/decoding state survive.
+        """
+        self._duplicate_levels = dict(levels)
+        if self._records:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self._records) - 1, 0),
+                [DUPLICATE_LEVEL_ROLE],
+            )
 
     def record_at(self, row: int) -> MediaRecord | None:
         if 0 <= row < len(self._records):
@@ -846,6 +912,8 @@ class MediaGridModel(QAbstractListModel):
             if not decode_supported(record.media_type.value):
                 return THUMB_NONE
             return THUMB_PENDING
+        if role == DUPLICATE_LEVEL_ROLE:
+            return self._duplicate_levels.get(media_id)
         if role == Qt.ToolTipRole:
             tip = (
                 f"{record.file.relative_path}\n"

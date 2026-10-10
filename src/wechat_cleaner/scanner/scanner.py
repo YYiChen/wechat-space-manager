@@ -125,11 +125,36 @@ def discover_account_roots(root: str | os.PathLike[str]) -> tuple[Path, ...]:
     return tuple(account_roots)
 
 
+def _normalized_subpath_parts(subpath: str) -> tuple[str, ...]:
+    """Split a user-supplied subpath into safe relative path segments.
+
+    Accepts both ``/`` and ``\\`` separators, strips leading/trailing ones, and
+    refuses empty segments, ``.`` and ``..`` so the value can never escape the
+    account root.  An empty/whitespace value means "no focus" (full scan).
+    """
+
+    cleaned = subpath.strip().strip("\\/").replace("/", "\\")
+    if not cleaned:
+        return ()
+    parts = tuple(segment for segment in cleaned.split("\\") if segment)
+    if not parts:
+        return ()
+    for segment in parts:
+        if segment in {".", ".."} or not segment.strip():
+            raise ScannerError(
+                ContractErrorCode.INVALID_PATH,
+                "focus subpath must be a relative path below the account root "
+                "and cannot contain '.', '..' or empty segments",
+            )
+    return parts
+
+
 def scan_account(
     account_root: str | os.PathLike[str],
     *,
     scanner_version: str = DEFAULT_SCANNER_VERSION,
     progress: Callable[[int], None] | None = None,
+    subpath: str | None = None,
 ) -> ScanResult:
     """Inventory one account directory without opening or changing its files.
 
@@ -137,6 +162,13 @@ def scan_account(
     discovered so far.  It is a read-only notification: it never influences
     what is scanned, and callers may use it to drive UI feedback from a
     worker thread.
+
+    ``subpath`` optionally restricts the walk to one existing directory below
+    the account root (folder-focus scan).  Returned ``relative_path`` values
+    stay relative to the account root, so the classification rules and the
+    manifest semantics are identical to a full scan; the manifest simply only
+    reflects the focused subtree.  Directories outside the subtree are never
+    enumerated.
     """
 
     root_path = _validated_directory(account_root)
@@ -148,11 +180,35 @@ def scan_account(
     if not scanner_version.strip():
         raise ScannerError(ContractErrorCode.INVALID_PATH, "scanner_version cannot be empty")
 
+    sub_parts = _normalized_subpath_parts(subpath) if subpath is not None else ()
+    if sub_parts:
+        focus_path = root_path.joinpath(*sub_parts)
+        # Reuses every root check (exists, is a directory, not a reparse
+        # point, resolves to itself) for the focus directory.
+        _validated_directory(focus_path)
+        # Guard against a focus root that resolves outside the account root
+        # through a reparse point deeper in the tree.
+        try:
+            resolved_focus = focus_path.resolve(strict=True)
+            resolved_root = root_path.resolve(strict=True)
+        except OSError as exc:
+            raise ScannerError(
+                ContractErrorCode.INVALID_PATH,
+                "focus subpath could not be resolved",
+            ) from exc
+        if not os.path.normcase(str(resolved_focus)).startswith(
+            os.path.normcase(str(resolved_root)) + os.sep
+        ):
+            raise ScannerError(
+                ContractErrorCode.INVALID_PATH,
+                "focus subpath resolves outside the account root",
+            )
+
     account = AccountRef(
         account_id=root_path.name,
         account_root=_windows_style(root_path),
     )
-    files, errors = _walk_account(root_path, progress=progress)
+    files, errors = _walk_account(root_path, progress=progress, subpath_parts=sub_parts)
     files = tuple(sorted(files, key=lambda item: item.relative_path.casefold()))
     errors = tuple(sorted(errors, key=_error_sort_key))
     indexed_roots = tuple(
@@ -171,14 +227,25 @@ def scan_account(
 
 
 def _walk_account(
-    root: Path, progress: Callable[[int], None] | None = None
+    root: Path,
+    progress: Callable[[int], None] | None = None,
+    subpath_parts: tuple[str, ...] = (),
 ) -> tuple[list[ScannedFile], list[ContractError]]:
+    """Walk ``root`` (optionally pruned to the ``subpath_parts`` subtree).
+
+    The pruning never changes what a visited path means: every discovered file
+    keeps its full path relative to the account root, so a focused walk yields
+    exactly the subset of the full walk under the focus prefix.
+    """
+
     files: list[ScannedFile] = []
     errors: list[ContractError] = []
     pending: list[tuple[Path, tuple[str, ...]]] = [(root, ())]
 
     while pending:
         current, parent_parts = pending.pop()
+        if not _within_focus(parent_parts, subpath_parts):
+            continue
         try:
             if _path_is_reparse(current):
                 errors.append(
@@ -225,6 +292,24 @@ def _walk_account(
                 errors.append(_scan_error(ContractErrorCode.INVALID_PATH, parts))
 
     return files, errors
+
+
+def _within_focus(parts: tuple[str, ...], focus: tuple[str, ...]) -> bool:
+    """Whether a directory at ``parts`` may be enumerated under a focus prefix.
+
+    With no focus everything is allowed.  Otherwise a directory qualifies only
+    when it lies on the path towards the focus root or inside the focus
+    subtree.  The comparison folds case because Windows paths are
+    case-insensitive; discovered file names still keep their real casing.
+    """
+
+    if not focus:
+        return True
+    folded = tuple(part.casefold() for part in parts)
+    folded_focus = tuple(part.casefold() for part in focus)
+    if len(folded) <= len(folded_focus):
+        return folded == folded_focus[: len(folded)]
+    return folded[: len(folded_focus)] == folded_focus
 
 
 def _classify_media(parts: tuple[str, ...]) -> MediaType:

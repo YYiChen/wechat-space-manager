@@ -83,10 +83,13 @@ class FakeSession:
         cache_root: str,
         fail_preview=False,
         export_fail=False,
+        account_root: str = "",
     ):
         self._records = records
         self.cache_root = cache_root
         self.fail_preview = fail_preview
+        self.export_fail = export_fail
+        self.account_root = account_root
         self.closed = False
         self.cleared_decoded = 0
         self.preview_variants: list[str] = []
@@ -96,8 +99,20 @@ class FakeSession:
         return {"database_count": 35, "database_bytes": 1_381_945_344,
                 "keyed_count": 27, "unkeyed_count": 8, "account_count": 1}
 
-    def records(self, limit: int | None = None, progress=None):
-        return self._records if limit is None else self._records[:limit]
+    def records(self, limit: int | None = None, progress=None, subpath=None):
+        # The real session forwards subpath to the scanner; the fake mirrors
+        # the signature and honours the focus prefix (with "/" or "\").
+        records = self._records if limit is None else self._records[:limit]
+        focus = (subpath or "").strip().replace("/", "\\").strip("\\")
+        if focus:
+            prefix = focus + "\\"
+            records = tuple(
+                record
+                for record in records
+                if (rel := record.file.relative_path.replace("/", "\\")) == focus
+                or rel.startswith(prefix)
+            )
+        return records
 
     def preview(self, record, variant=DecodeVariant.THUMBNAIL, max_edge_px=256):
         self.preview_variants.append(variant.value)
@@ -344,3 +359,95 @@ def test_fake_facade_export_original_rejects_non_image():
     assert exported.payload == b"fake-export-bytes"
     assert refused.ok is False
     assert "不是图片" in refused.error_message
+
+
+# ---------------------------------------------------------------------------
+# Duplicate detection (ITER-20261010): facade grouping + MD5 verdicts.
+# ---------------------------------------------------------------------------
+
+
+def _named_record(name: str, size: int = 100, *, cache: bool = False) -> MediaRecord:
+    return MediaRecord(
+        account_id="wxid_demo_alpha",
+        file=FileIdentity(
+            relative_path=f"msg/file/2026-05/{name}", byte_size=size, modified_time_ns=1
+        ),
+        media_type=MediaType.FILE,
+        observed_at=datetime(2026, 10, 1, tzinfo=UTC),
+        mapping_confidence=MappingConfidence.UNMAPPED,
+        mapping_reason="filesystem scan only",
+        is_regenerable_cache=cache,
+    )
+
+
+def test_fake_facade_groups_and_verifies_same_size_duplicates():
+    records = (
+        _named_record("report.pdf", 500),
+        _named_record("report (1).pdf", 500),
+        _named_record("report (2).pdf", 700),
+        _named_record("unique.txt", 10),
+    )
+    facade = FakeRealSessionFacade(records=records)
+
+    index = facade.duplicate_groups()
+
+    assert len(index) == 1
+    group = index.groups[0]
+    assert group.display_name == "report.pdf"
+    assert len(group.members) == 3
+    assert index.level_of(records[0].media_id) == "S2"
+    assert index.level_of(records[2].media_id) == "S1"
+    assert index.level_of(records[3].media_id) is None
+
+    subgroup = group.size_subgroups[0]
+    verdict = facade.verify_duplicate_group(
+        type(group)(
+            normalized_name=group.normalized_name,
+            display_name=group.display_name,
+            members=subgroup,
+        )
+    )
+    assert verdict.content_identical is True  # same size → same fake digest
+    assert verdict.skipped == ()
+
+
+def test_fake_facade_verify_honours_injected_overrides():
+    records = (
+        _named_record("doc.bin", 100),
+        _named_record("doc (1).bin", 100),
+    )
+    facade = FakeRealSessionFacade(records=records)
+    group = facade.duplicate_groups().groups[0]
+    facade.verify_md5_overrides = {
+        records[0].file.relative_path: "aaa",
+    }
+
+    verdict = facade.verify_duplicate_group(group)
+
+    assert verdict.content_identical is False
+    assert verdict.md5_by_relative_path[records[0].file.relative_path] == "aaa"
+    assert verdict.skipped[0][1] == "NO_FAKE_HASH"
+
+
+def test_real_facade_forwards_duplicate_methods_to_session(tmp_path: Path):
+    records = (
+        _named_record("same.bin", 100),
+        _named_record("same (1).bin", 100),
+    )
+    facade = RealSessionFacade(
+        session_factory=lambda **_: FakeSession(
+            records=records, cache_root=str(tmp_path / "cache"),
+            account_root=str(tmp_path),
+        )
+    )
+    facade.connect("C://synthetic//xwechat_files", str(tmp_path / "cache"), "wxid_demo_alpha")
+    facade.load_records()
+
+    index = facade.duplicate_groups()
+    assert len(index) == 1
+
+    # No real file exists under the tmp account root: every member is skipped
+    # with a stable reason, and the verdict honestly stays at S2.
+    verdict = facade.verify_duplicate_group(index.groups[0])
+    assert verdict.content_identical is False
+    assert {reason for _path, reason in verdict.skipped} == {"SOURCE_MISSING"}

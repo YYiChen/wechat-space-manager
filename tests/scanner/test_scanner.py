@@ -127,3 +127,115 @@ def test_scan_account_progress_reports_running_count_without_changing_result(
     )
     assert plain.files == with_progress.files == with_callback.files
     assert plain.manifest.manifest_sha256 == with_callback.manifest.manifest_sha256
+
+
+# ---------------------------------------------------------------------------
+# Folder-focus scans (ITER-20261008): restrict the walk to one subtree while
+# keeping every path relative to the account root.
+# ---------------------------------------------------------------------------
+
+_FOCUS_PREFIX = r"msg\attach\8a8b0c0d0e0f10111213141516171819"
+
+
+def test_focus_scan_is_exact_subset_of_full_scan(tmp_path: Path) -> None:
+    root, _ = _build_fixture(tmp_path)
+    alpha_root = root / "wxid_synthetic_alpha_d729"
+    full = scan_account(alpha_root)
+    focus = scan_account(alpha_root, subpath=_FOCUS_PREFIX)
+
+    expected = tuple(
+        item
+        for item in full.files
+        if item.relative_path.startswith(_FOCUS_PREFIX + "\\")
+    )
+    assert expected, "fixture must have files under the focus prefix"
+    assert focus.files == expected
+    assert focus.manifest.file_count == len(expected)
+    assert focus.manifest.total_bytes == sum(item.byte_size for item in expected)
+    # The focused manifest still describes the same account.
+    assert focus.account == full.account
+    assert focus.manifest.errors == ()
+
+
+def test_focus_scan_accepts_forward_slashes_and_keeps_result_identical(
+    tmp_path: Path,
+) -> None:
+    root, _ = _build_fixture(tmp_path)
+    alpha_root = root / "wxid_synthetic_alpha_d729"
+    focus = scan_account(alpha_root, subpath=_FOCUS_PREFIX)
+    forward = scan_account(
+        alpha_root, subpath=_FOCUS_PREFIX.replace("\\", "/")
+    )
+    padded = scan_account(alpha_root, subpath=f"/{_FOCUS_PREFIX}/")
+
+    assert forward.files == focus.files
+    assert padded.files == focus.files
+
+
+def test_focus_scan_none_and_empty_mean_full_scan(tmp_path: Path) -> None:
+    root, _ = _build_fixture(tmp_path)
+    alpha_root = root / "wxid_synthetic_alpha_d729"
+    default = scan_account(alpha_root)
+
+    for variant in (None, "", "   ", "/", "\\\\"):
+        variant_result = scan_account(alpha_root, subpath=variant)
+        assert variant_result.files == default.files
+        assert (
+            variant_result.manifest.manifest_sha256
+            == default.manifest.manifest_sha256
+        )
+
+
+def test_focus_scan_rejects_unsafe_or_missing_subpaths(tmp_path: Path) -> None:
+    root, _ = _build_fixture(tmp_path)
+    alpha_root = root / "wxid_synthetic_alpha_d729"
+
+    unsafe = [
+        r"..\wxid_synthetic_beta_d729\msg",
+        "msg/../../outside",
+        r"msg\attach\..\..\..\..\Windows",
+        r"msg\nope",  # missing directory
+        r"msg\attach\8a8b0c0d0e0f10111213141516171819\2026-02\Image\alpha_001.dat",  # a file
+    ]
+    for subpath in unsafe:
+        with pytest.raises(ScannerError) as excinfo:
+            scan_account(alpha_root, subpath=subpath)
+        assert excinfo.value.code is ContractErrorCode.INVALID_PATH
+
+
+def test_within_focus_folds_case_for_windows_semantics() -> None:
+    from wechat_cleaner.scanner.scanner import _within_focus
+
+    focus = ("Msg", "ATTACH", "8a8b")
+    # Case-insensitive on every segment (Windows paths are case-insensitive).
+    assert _within_focus(("msg",), focus)
+    assert _within_focus(("msg", "attach"), focus)
+    assert _within_focus(("MSG", "ATTACH", "8A8B", "2026-02"), focus)
+    assert _within_focus(("msg", "attach", "8a8b", "deep", "file"), focus)
+    # Sibling subtrees are pruned.
+    assert not _within_focus(("msg", "video"), focus)
+    assert not _within_focus(("business",), focus)
+    # No focus: everything is allowed.
+    assert _within_focus(("anything",), ())
+
+
+def test_focus_scan_progress_counts_only_focused_files(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from wechat_cleaner.scanner import scanner as scanner_module
+
+    # The default cadence (512) never fires for a 5-file subtree; shrink it so
+    # the callback semantics become observable.
+    monkeypatch.setattr(scanner_module, "_PROGRESS_EVERY", 2)
+    root, _ = _build_fixture(tmp_path)
+    alpha_root = root / "wxid_synthetic_alpha_d729"
+    counts: list[int] = []
+    focus = scan_account(alpha_root, subpath=_FOCUS_PREFIX, progress=counts.append)
+
+    assert counts, "the callback should fire for a focused walk too"
+    assert counts == sorted(counts)
+    # Cadence semantics: every multiple of 2 is reported; the trailing file
+    # below the cadence is not.  The ceiling is the focused count, not the
+    # account total.
+    assert counts[-1] == (focus.manifest.file_count // 2) * 2
+    assert focus.manifest.file_count == 5

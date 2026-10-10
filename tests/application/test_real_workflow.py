@@ -22,6 +22,7 @@ from wechat_cleaner.domain.contracts import (
     DecodeVariant,
     FileIdentity,
     MappingConfidence,
+    MediaType,
 )
 
 ACCOUNT = "wxid_synthetic_account_d729"
@@ -353,3 +354,46 @@ def test_rec_zone_attachments_classified_by_extension_not_directory():
     assert pipeline(rec + "abc_t") is MediaType.THUMBNAIL
     # Outside Rec nothing changes even when the extension is document-like.
     assert pipeline("msg\\attach\\8a8b\\2025-05\\Img\\abc.pdf") is MediaType.IMAGE
+
+
+# ---------------------------------------------------------------------------
+# Folder-focus scans (ITER-20261008): records(subpath=...) narrows the scan.
+# ---------------------------------------------------------------------------
+
+def test_records_subpath_focuses_scan_to_one_subtree(env):
+    session = _session(env)
+    full = session.records()
+    assert {r.media_type for r in full} == {
+        MediaType.THUMBNAIL,  # a1_t.dat under msg/attach/.../Img
+        MediaType.VIDEO,  # clip.mp4 under msg/video/2026-03
+    }
+
+    focused = session.records(subpath="msg\\attach\\8a8b0c0d")
+    assert [r.file.relative_path for r in focused] == [
+        "msg\\attach\\8a8b0c0d\\2026-02\\Img\\a1_t.dat"
+    ]
+    # Focus does not change record semantics: still UNMAPPED, never eligible.
+    assert all(
+        r.mapping_confidence is MappingConfidence.UNMAPPED for r in focused
+    )
+
+    by_video = session.records(subpath="msg/video/2026-03")
+    assert [r.file.relative_path for r in by_video] == ["msg\\video\\2026-03\\clip.mp4"]
+
+    # No focus keeps the full-account walk.  (Records carry a fresh media_id
+    # per scan, so compare the identity-relevant projection.)
+    assert [r.file.relative_path for r in session.records(subpath=None)] == [
+        r.file.relative_path for r in full
+    ]
+
+
+def test_records_rejects_unsafe_focus_subpath(env):
+    session = _session(env)
+    with pytest.raises(DecoderFailure):
+        session.records(subpath="..\\other_account")
+
+
+def test_records_focus_subpath_errors_surface_as_decoder_failure(env):
+    session = _session(env)
+    with pytest.raises(DecoderFailure):
+        session.records(subpath="msg\\does_not_exist")

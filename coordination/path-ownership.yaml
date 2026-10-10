@@ -56,6 +56,10 @@ rules:
     owner: decoder
   - path: tests/real_media/**
     owner: decoder
+  - path: src/wechat_cleaner/duplicates/**
+    owner: maintainer
+  - path: tests/duplicates/**
+    owner: maintainer
   - path: scripts/probe_real_media_key.py
     owner: decoder
   - path: scripts/harness_real_readonly.py

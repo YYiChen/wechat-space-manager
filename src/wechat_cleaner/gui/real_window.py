@@ -66,6 +66,7 @@ from PySide6.QtWidgets import (
 )
 
 from wechat_cleaner.domain.contracts import MediaRecord, MediaType
+from wechat_cleaner.duplicates import DuplicateIndex, GroupVerification
 from wechat_cleaner.real_db import is_merged_forward, session_dir_of
 
 from .data_root import find_data_root
@@ -279,6 +280,30 @@ def _human_bytes(value: int) -> str:
         if size < 1024 or unit == "TB":
             return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
         size /= 1024
+
+
+def _relative_focus_path(account_root: str, chosen: str) -> str | None:
+    """Chosen folder as a ``\\``-relative path below the account root.
+
+    ``None`` when the folder is outside the root (different drive, sibling
+    tree, or the root itself is unrelated).  The containment check is
+    case-folded on both sides and resolved, so ``..`` traversal or a
+    reparse-redirected path cannot smuggle a focus outside the account; the
+    returned relative path keeps the folder's real casing (the scanner prunes
+    case-insensitively, matching Windows semantics).
+    """
+    if not account_root or not chosen:
+        return None
+    root_abs = os.path.normpath(os.path.abspath(account_root))
+    chosen_abs = os.path.normpath(os.path.abspath(chosen))
+    root_norm = os.path.normcase(root_abs)
+    chosen_norm = os.path.normcase(chosen_abs)
+    if chosen_norm == root_norm:
+        # The account root itself: focusing it is the same as no focus.
+        return None
+    if not chosen_norm.startswith(root_norm + os.sep):
+        return None
+    return os.path.relpath(chosen_abs, root_abs).replace("/", "\\")
 
 
 def _app_icon_file() -> Path | None:
@@ -583,6 +608,16 @@ class RealReadOnlyWindow(QMainWindow):
         self._busy_clock.timeout.connect(self._tick_busy_clock)
         self._last_scan_seconds: float | None = None
         self._scan_seconds_note: str = ""
+        # Folder focus: relative path below the account root the scan is
+        # restricted to (None = full account).  Set by 「聚焦文件夹…」,
+        # cleared by 「取消聚焦」.
+        self._folder_focus: str | None = None
+        # Duplicate detection (ITER-20261010): the index over the currently
+        # loaded records, the per-record level map pushed into the grid model
+        # (S1/S2/S3), and MD5 verdicts already computed this session.
+        self._duplicate_index = DuplicateIndex()
+        self._duplicate_levels: dict[str, str] = {}
+        self._verified_groups: dict[str, GroupVerification] = {}
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(_AUTO_PREVIEW_DELAY_MS)
@@ -780,6 +815,32 @@ class RealReadOnlyWindow(QMainWindow):
             "只看来自合并转发聊天记录的附件（msg/attach/…/Rec/ 布局）。"
         )
 
+        # Folder focus: scan (and show) only one directory below the account
+        # root.  For answering "what is inside this unusually large folder?"
+        # without scanning the whole account first.  Strictly read-only.
+        self.focus_button = QPushButton("聚焦文件夹…")
+        self.focus_button.setToolTip(
+            "只解析账号目录下的一个文件夹（例如某个体积异常大的目录）：\n"
+            "扫描范围收窄到该文件夹，网格与筛选只显示其中的内容。\n"
+            "纯只读操作，不写入微信目录。"
+        )
+        self.focus_button.clicked.connect(self.focus_folder)
+        self.unfocus_button = QPushButton("取消聚焦")
+        self.unfocus_button.setToolTip("回到整个账号的扫描范围。")
+        self.unfocus_button.setEnabled(False)
+        self.unfocus_button.clicked.connect(self.clear_focus)
+
+        # Duplicate verification: MD5 over the encrypted bytes of every member
+        # of the selected record's duplicate group.  Read-only; worker thread.
+        self.verify_dup_button = QPushButton("验证重复（MD5）")
+        self.verify_dup_button.setToolTip(
+            "对选中文件所在的同名组计算 MD5（按文件密文比对，无需解密）：\n"
+            "全部一致 → 格子标红，确认是同一份文件；不一致 → 保持橙色。\n"
+            "只读取文件内容，不写入微信目录。"
+        )
+        self.verify_dup_button.setEnabled(False)
+        self.verify_dup_button.clicked.connect(self.verify_duplicates)
+
         row.addWidget(QLabel("类型"))
         row.addWidget(self.type_combo)
         row.addWidget(QLabel("最小"))
@@ -799,6 +860,9 @@ class RealReadOnlyWindow(QMainWindow):
         row2.addWidget(QLabel("排序"))
         row2.addWidget(self.sort_combo)
         row2.addWidget(self.merged_check)
+        row2.addWidget(self.focus_button)
+        row2.addWidget(self.unfocus_button)
+        row2.addWidget(self.verify_dup_button)
         outer.addLayout(row)
         outer.addLayout(row2)
         # Live aggregate of the current filter (excluding the session choice
@@ -1070,13 +1134,19 @@ class RealReadOnlyWindow(QMainWindow):
             if self._last_scan_seconds is not None
             else ""
         )
+        if self._folder_focus:
+            scope = f"（聚焦 {self._folder_focus}）"
+        else:
+            scope = ""
         started = time.monotonic()
         outcome = self._run_blocking(
             lambda: (
-                self._facade.load_records(progress=self._emit_progress),
+                self._facade.load_records(
+                    progress=self._emit_progress, subpath=self._folder_focus
+                ),
                 self._facade.session_mapping(),
             ),
-            f"正在扫描媒体文件（大账号约 10 万条，需要十几秒）{hint}",
+            f"正在扫描媒体文件{scope}（大账号约 10 万条，需要十几秒）{hint}",
             progress_slot=self._on_scan_progress,
         )
         if not outcome.get("ok"):
@@ -1087,8 +1157,188 @@ class RealReadOnlyWindow(QMainWindow):
         # Availability is resolved lazily (only for displayed rows / active filter)
         # so a 100k-file account does not trigger 100k stat calls up front.
         self._availability = {}
+        # New scan → new media ids: drop stale MD5 verdicts and rebuild the
+        # duplicate index over the freshly loaded records.
+        self._verified_groups = {}
+        self._refresh_duplicate_index()
+        self.unfocus_button.setEnabled(self._folder_focus is not None)
         self.apply_filters()
         return len(self._all_records)
+
+    def _refresh_duplicate_index(self) -> None:
+        """Rebuild the duplicate index and push levels into the grid model.
+
+        Pure in-memory (no disk access), so it runs on the UI thread.  Levels
+        already merge this session's MD5 verdicts: a group verified identical
+        reports S3 for every member.
+        """
+        try:
+            self._duplicate_index = self._facade.duplicate_groups()
+        except FacadeError:
+            self._duplicate_index = DuplicateIndex()
+        self._recompute_duplicate_levels()
+        self._grid_model.set_duplicate_levels(self._duplicate_levels)
+
+    def _recompute_duplicate_levels(self) -> None:
+        """Levels from the index plus this session's MD5 verdicts.
+
+        Red (S3) is decided per digest cluster: two or more members of the
+        group hashing to the same digest are provably the same file, whether
+        or not the whole group matches.  Unverified or divergent members keep
+        their S2/S1 colour — honest colours over convenient ones.
+        """
+        levels: dict[str, str] = {}
+        for group in self._duplicate_index.groups:
+            verdict = self._verified_groups.get(group.normalized_name)
+            red_ids: set[str] = set()
+            if verdict is not None:
+                by_digest: dict[str, list[str]] = {}
+                for relative, digest in verdict.md5_by_relative_path.items():
+                    by_digest.setdefault(digest, []).append(relative)
+                shared_paths = {
+                    relative
+                    for relatives in by_digest.values()
+                    if len(relatives) >= 2
+                    for relative in relatives
+                }
+                red_ids = {
+                    str(record.media_id)
+                    for record in group.members
+                    if record.file.relative_path in shared_paths
+                }
+            for record in group.members:
+                media_id = str(record.media_id)
+                if media_id in red_ids:
+                    levels[media_id] = "S3"
+                else:
+                    base = self._duplicate_index.level_of(record.media_id)
+                    if base:
+                        levels[media_id] = base
+        self._duplicate_levels = levels
+
+    def verify_duplicates(self) -> None:
+        """MD5-verify the selected record's duplicate group (worker thread).
+
+        One confirmation-free step: it only reads files.  On success the
+        verdicts are stored, levels recomputed, and the grid repaints — red
+        when every member hashed identical, honest orange otherwise.
+        """
+        selected = self.selected_records
+        if len(selected) != 1:
+            return
+        group = self._duplicate_index.group_of(selected[0].media_id)
+        if group is None:
+            return
+        outcome = self._run_blocking(
+            lambda: self._facade.verify_duplicate_group(
+                group, progress=self._emit_progress
+            ),
+            f"正在计算 MD5（{len(group.members)} 个文件，按需读取，不写入任何文件）…",
+        )
+        if not outcome.get("ok"):
+            return
+        verdict = outcome["value"]
+        self._verified_groups[group.normalized_name] = verdict
+        self._recompute_duplicate_levels()
+        self._grid_model.set_duplicate_levels(self._duplicate_levels)
+        # _run_blocking already released busy and refreshed the selection line
+        # with the *pre*-verification state; re-sync so the summary shows the
+        # fresh red/orange facts.
+        self._sync_action_buttons()
+        red_count = sum(
+            1 for record in group.members
+            if self._duplicate_levels.get(str(record.media_id)) == "S3"
+        )
+        skipped = len(verdict.skipped)
+        note = f"（{skipped} 个文件读取失败，未计入比对）" if skipped else ""
+        if red_count:
+            self._set_status(
+                f"验证完成：{group.display_name} 组内有 {red_count} 份文件"
+                f"内容完全相同（MD5 一致），已标红{note}；其余成员保持橙色。"
+            )
+        else:
+            self._set_status(
+                f"验证完成：{group.display_name} 组内没有内容相同的文件{note}；"
+                "全部保持原有标注。"
+            )
+
+    def focus_folder(self) -> None:
+        """Ask for one folder below the account root and scan only that tree.
+
+        The choice happens in a native directory dialog rooted at the account
+        root; anything outside the root is rejected before a scan starts, so
+        the focused walk can never reach beyond the approved account.  Status
+        and aggregate lines are updated by ``load_records`` → ``apply_filters``
+        like every other reload, keeping one single source of truth.
+        """
+        root = self._account_root_for_focus()
+        if root is None:
+            return
+        chosen = QFileDialog.getExistingDirectory(
+            self,
+            "选择要聚焦的文件夹（账号目录内的子文件夹）",
+            root,
+        )
+        if not chosen:
+            return
+        focus = _relative_focus_path(root, chosen)
+        if focus is None:
+            self._set_status(
+                "聚焦失败：所选文件夹不在当前账号目录内。"
+                f"请在账号目录（{root}）内选择。"
+            )
+            return
+        self._folder_focus = focus
+        self.load_records()
+
+    def clear_focus(self) -> None:
+        """Drop the folder focus and rescan the whole account."""
+        if self._folder_focus is None:
+            return
+        self._folder_focus = None
+        self.load_records()
+
+    def _account_root_for_focus(self) -> str | None:
+        """Current account root for the focus dialog, or ``None`` (reported)."""
+        if not self._summary:
+            self._set_status("请先连接账号，再使用聚焦文件夹。")
+            return None
+        try:
+            root = self._facade.account_root()
+        except FacadeError as exc:
+            self._set_status(f"无法确定账号目录：{exc}")
+            return None
+        return root or None
+
+    def _duplicate_summary_note(self) -> str:
+        """Status-bar count of what the duplicate index currently knows."""
+        total_groups = len(self._duplicate_index)
+        if not total_groups:
+            return ""
+        members = sum(len(group.members) for group in self._duplicate_index.groups)
+        verified = sum(
+            1 for verdict in self._verified_groups.values() if verdict.content_identical
+        )
+        note = f"｜重复检测：{members} 条文件分属 {total_groups} 个同名组"
+        if verified:
+            note += f"（{verified} 组已验证为同一文件，红色标注）"
+        return note
+
+    def _focus_owner_note(self) -> str:
+        """Human answer to "whose folder is this?" for attach directories."""
+        if not self._folder_focus:
+            return ""
+        parts = [p for p in self._folder_focus.replace("/", "\\").split("\\") if p]
+        if len(parts) < 3 or parts[0].casefold() != "msg" or parts[1].casefold() != "attach":
+            return ""
+        name, kind = self._session_display(parts[2])
+        return f"｜聚焦目录归属：{name}（{kind}）"
+
+    def _focus_summary_prefix(self) -> str:
+        """Prefix for the aggregate line while a folder focus is active."""
+        if not self._folder_focus:
+            return "当前筛选："
+        return f"已聚焦 {self._folder_focus}｜当前筛选："
 
     def _session_display(self, dir_name: str) -> tuple[str, str]:
         """``(display name, kind label)`` for an attach directory.
@@ -1345,6 +1595,8 @@ class RealReadOnlyWindow(QMainWindow):
             notes += "｜会话筛选覆盖图片/缩略图（文件、视频、语音按月存放，无法归属会话）"
         if self.merged_check.isChecked():
             notes += "｜仅显示合并转发聊天记录的附件"
+        notes += self._duplicate_summary_note()
+        notes += self._focus_owner_note()
         self._set_status(
             f"匹配 {total} 条，共 {_human_bytes(total_bytes)}，已平铺展示"
             "（缩略图随滚动加载）。单击选中、Ctrl/Shift 多选后可批量管理。"
@@ -1372,7 +1624,7 @@ class RealReadOnlyWindow(QMainWindow):
         total_bytes = sum(record.file.byte_size for record in resolved)
         unattributed = total_count - sum(count for count, _size in stats.values())
         unattributed_bytes = total_bytes - sum(size for _count, size in stats.values())
-        text = f"当前筛选：{total_count} 条，共 {_human_bytes(total_bytes)}"
+        text = f"{self._focus_summary_prefix()}{total_count} 条，共 {_human_bytes(total_bytes)}"
         ranked = sorted(stats.items(), key=lambda kv: (-kv[1][1], -kv[1][0], kv[0]))[:3]
         if ranked:
             parts = []
@@ -1539,6 +1791,9 @@ class RealReadOnlyWindow(QMainWindow):
             self.connect_button,
             self.load_button,
             self.apply_button,
+            self.focus_button,
+            self.unfocus_button,
+            self.verify_dup_button,
             self.preview_button,
             self.clip_play_button,
             self.recycle_button,
@@ -1578,6 +1833,12 @@ class RealReadOnlyWindow(QMainWindow):
         # a picture; the frozen self-test only ever sees the default text.
         self.preview_button.setText("预览视频" if single_video else "预览图片")
         self.recycle_button.setEnabled(single is not None)
+        # Duplicate verification needs exactly one record that belongs to a
+        # duplicate group; a unique file has nothing to verify against.
+        self.verify_dup_button.setEnabled(
+            single is not None
+            and self._duplicate_index.group_of(single.media_id) is not None
+        )
         self.export_button.setEnabled(single_export_ok)
         self.export_recycle_button.setEnabled(single_export_ok)
         # A greyed-out button must say why: "只有缩略图" is the case the user
@@ -1645,9 +1906,36 @@ class RealReadOnlyWindow(QMainWindow):
                 self._availability.get(record.media_id, "unknown"), "未知"
             )
             stem = record.file.relative_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-            return f"已选择 1 项（{state}）：{stem}\n{self._conversation_of(record)}"
+            return (
+                f"已选择 1 项（{state}）：{stem}\n"
+                f"{self._conversation_of(record)}{self._duplicate_of(record)}"
+            )
         total = sum(record.file.byte_size for record in selected)
         return f"已选择 {len(selected)} 项，共 {_human_bytes(total)}"
+
+    def _duplicate_of(self, record: MediaRecord) -> str:
+        """Duplicate-group facts for the selection summary, or an empty string."""
+        group = self._duplicate_index.group_of(record.media_id)
+        if group is None:
+            return ""
+        verdict = self._verified_groups.get(group.normalized_name)
+        if verdict is not None and str(record.media_id) in {
+            str(member.media_id)
+            for member in group.members
+            if self._duplicate_levels.get(str(member.media_id)) == "S3"
+        }:
+            twins = sum(
+                1
+                for member in group.members
+                if self._duplicate_levels.get(str(member.media_id)) == "S3"
+            ) - 1
+            return f"\n重复检测：与另外 {twins} 份文件内容完全相同（MD5 一致，已标红）"
+        same_size = sum(len(subgroup) for subgroup in group.size_subgroups)
+        detail = f"，其中 {same_size} 份大小相同" if same_size else ""
+        return (
+            f"\n重复检测：与另外 {len(group.members) - 1} 份文件同名{detail}"
+            "（黄色=同名，橙色=同名同大小；选中后点「验证重复（MD5）」可确认）"
+        )
 
     def _conversation_of(self, record: MediaRecord) -> str:
         """Which chat this record came from, as a user-facing phrase.

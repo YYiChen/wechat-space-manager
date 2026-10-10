@@ -23,6 +23,13 @@ from typing import Any, Protocol
 
 from wechat_cleaner.application import RealReadOnlySession
 from wechat_cleaner.domain.contracts import DecodeVariant, MediaRecord, MediaType
+from wechat_cleaner.duplicates import (
+    DuplicateGroup,
+    DuplicateIndex,
+    GroupVerification,
+    same_name_groups,
+    verify_group,
+)
 from wechat_cleaner.real_db import discover_accounts, session_dir_of
 from wechat_cleaner.real_media.locate import resolve_source_path
 from wechat_cleaner.real_media.trash import recycle_media_source
@@ -162,8 +169,22 @@ class RealReadOnlyPort(Protocol):
     def database_summary(self) -> dict: ...
 
     def load_records(
-        self, limit: int | None = None, progress: Callable[[int], None] | None = None
+        self,
+        limit: int | None = None,
+        progress: Callable[[int], None] | None = None,
+        subpath: str | None = None,
     ) -> tuple[MediaRecord, ...]: ...
+
+    def account_root(self) -> str: ...
+
+    def duplicate_groups(self) -> DuplicateIndex: ...
+
+    def verify_duplicate_group(
+        self,
+        group: DuplicateGroup,
+        progress: Callable[[int], None] | None = None,
+        cancel: Callable[[], bool] | None = None,
+    ) -> GroupVerification: ...
 
     def session_mapping(self) -> dict[str, dict]: ...
 
@@ -247,11 +268,53 @@ class RealSessionFacade:
         return self._require_session().database_summary()
 
     def load_records(
-        self, limit: int | None = None, progress: Callable[[int], None] | None = None
+        self,
+        limit: int | None = None,
+        progress: Callable[[int], None] | None = None,
+        subpath: str | None = None,
     ) -> tuple[MediaRecord, ...]:
-        records = self._require_session().records(limit=limit, progress=progress)
+        records = self._require_session().records(
+            limit=limit, progress=progress, subpath=subpath
+        )
         self._record_index = {record.media_id: record for record in records}
         return records
+
+    def account_root(self) -> str:
+        """Absolute account root of the connected session (UI use only).
+
+        The folder-focus dialog uses it as the starting directory and to
+        verify that a chosen folder lies inside the account root.  The value
+        never enters receipts, logs or the index.
+        """
+        return str(self._require_session().account_root)
+
+    def duplicate_groups(self) -> DuplicateIndex:
+        """S1/S2 duplicate groups over the currently loaded records.
+
+        Pure in-memory grouping (no disk access), so the UI thread may call
+        it directly.  The range follows the loaded records: a folder-focus
+        scan yields groups inside the focused subtree only.
+        """
+        return same_name_groups(self._record_index.values())
+
+    def verify_duplicate_group(
+        self,
+        group: DuplicateGroup,
+        progress: Callable[[int], None] | None = None,
+        cancel: Callable[[], bool] | None = None,
+    ) -> GroupVerification:
+        """MD5 verdict for one candidate group (S3). Worker-thread only.
+
+        Hashes the encrypted container bytes of every member; identical
+        ciphertext implies identical plaintext, so no key is involved and the
+        source files are only read, never written.
+        """
+        session = self._require_session()
+
+        def resolve(record: MediaRecord) -> Path:
+            return resolve_source_path(session.account_root, record.file.relative_path)
+
+        return verify_group(group, resolve, progress=progress, cancel=cancel)
 
     def session_mapping(self) -> dict[str, dict]:
         session = self._require_session()
@@ -519,6 +582,16 @@ class FakeRealSessionFacade:
         # attach dir name; entries absent here degrade to the hash prefix.
         self.session_names: dict[str, str] = {}
         self.session_chatrooms: set[str] = set()
+        # Folder-focus demo root: the window uses it as the file-dialog start
+        # directory and to validate the chosen folder in tests.
+        self.demo_account_root: str = "C:/demo/wxid_demo_alpha"
+        # Records forwarded to ``load_records`` last call, so tests can assert
+        # the subpath actually reached the facade.
+        self.last_load_subpath: str | None = None
+        # Duplicate detection: optional per-relative-path md5 overrides.  When
+        # ``None`` (default), every member hashes to a size-derived value, so
+        # same-size subgroups verify as identical — the intuitive fake.
+        self.verify_md5_overrides: dict[str, str] | None = None
 
     def discover(self, db_root: str) -> tuple[AccountOption, ...]:
         if not db_root:
@@ -544,14 +617,70 @@ class FakeRealSessionFacade:
         }
 
     def load_records(
-        self, limit: int | None = None, progress: Callable[[int], None] | None = None
+        self,
+        limit: int | None = None,
+        progress: Callable[[int], None] | None = None,
+        subpath: str | None = None,
     ) -> tuple[MediaRecord, ...]:
         records = self._records if limit is None else self._records[:limit]
+        focus = (subpath or "").strip().replace("/", "\\").strip("\\")
+        self.last_load_subpath = focus or None
+        if focus:
+            prefix = focus + "\\"
+            records = tuple(
+                record
+                for record in records
+                # Synthetic fixtures use "/" separators, real scans use "\";
+                # fold both sides so the focus semantics match either layout.
+                if (rel := record.file.relative_path.replace("/", "\\")) == focus
+                or rel.startswith(prefix)
+            )
         if progress is not None and records:
             # Mirror the real facade's progress notifications once, so GUI
             # wiring is exercised in tests.
             progress(len(records))
         return records
+
+    def account_root(self) -> str:
+        return self.demo_account_root
+
+    def duplicate_groups(self) -> DuplicateIndex:
+        return same_name_groups(self._records)
+
+    def verify_duplicate_group(
+        self,
+        group: DuplicateGroup,
+        progress: Callable[[int], None] | None = None,
+        cancel: Callable[[], bool] | None = None,
+    ) -> GroupVerification:
+        """Fake MD5 verdict: size-derived digests, or injected overrides.
+
+        Default behaviour — every member yields ``fake-<size>`` — makes
+        same-size subgroups verify identical, which is what a UI test usually
+        wants.  With ``verify_md5_overrides`` set, members whose relative path
+        is absent from the dict are reported as skipped (``NO_FAKE_HASH``).
+        """
+        md5_by_path: dict[str, str] = {}
+        skipped: list[tuple[str, str]] = []
+        for record in group.members:
+            relative = record.file.relative_path
+            if self.verify_md5_overrides is None:
+                md5_by_path[relative] = f"fake-{record.file.byte_size:x}"
+            elif relative in self.verify_md5_overrides:
+                md5_by_path[relative] = self.verify_md5_overrides[relative]
+            else:
+                skipped.append((relative, "NO_FAKE_HASH"))
+            if progress is not None:
+                progress(len(md5_by_path) + len(skipped))
+        content_identical = (
+            bool(md5_by_path) and not skipped and len(set(md5_by_path.values())) == 1
+        )
+        return GroupVerification(
+            group_key=group.normalized_name,
+            content_identical=content_identical,
+            md5_by_relative_path=md5_by_path,
+            skipped=tuple(skipped),
+        )
 
     def session_mapping(self) -> dict[str, dict]:
         mapping: dict[str, dict] = {}

@@ -70,6 +70,7 @@ ALLOWED_MUTATING_PREFIXES = (
 # operations to a multi-selection behind one up-front confirmation, and each
 # file still gets its own audited outcome.
 # 「仅合并转发记录」is a read-only filter checkbox, not a mutating control.
+# 「验证重复（MD5）」only reads file bytes for comparison (ITER-20261010).
 SANCTIONED_ACTION_LABELS = (
     "预览图片",
     "预览视频",
@@ -82,6 +83,7 @@ SANCTIONED_ACTION_LABELS = (
     "批量移到回收站…",
     "批量导出后移入回收站…",
     "仅合并转发记录",
+    "验证重复（MD5）",
 )
 
 
@@ -197,7 +199,16 @@ def verify(artifact: Path) -> tuple[bool, dict]:
             continue
         if any(label.startswith(p) for p in ALLOWED_MUTATING_PREFIXES):
             continue
-        if label in {"自动检测", "连接", "重新加载数据库", "应用筛选"}:
+        if label in {
+            "自动检测",
+            "连接",
+            "重新加载数据库",
+            "应用筛选",
+            # Read-only scan-scope controls (folder focus, ITER-20261008):
+            # they only narrow what is scanned, never write anything.
+            "聚焦文件夹…",
+            "取消聚焦",
+        }:
             continue
         if label in SANCTIONED_ACTION_LABELS:
             continue

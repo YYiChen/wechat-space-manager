@@ -643,3 +643,59 @@ def test_zooming_keeps_the_picture_in_place(qtbot):
     # the tile size, so allow the small residual drift.)
     assert landed > 0
     assert abs(landed - anchor) <= 4
+
+
+# ---------------------------------------------------------------------------
+# Duplicate-detection signal (ITER-20261010): model role + delegate painting.
+# ---------------------------------------------------------------------------
+
+
+def test_model_exposes_duplicate_levels_per_record(records):
+    model = MediaGridModel()
+    model.set_records(records)
+    levels = {
+        str(records[0].media_id): "S2",
+        str(records[2].media_id): "S3",
+    }
+
+    model.set_duplicate_levels(levels)
+
+    assert model.index(0, 0).data(gallery.DUPLICATE_LEVEL_ROLE) == "S2"
+    assert model.index(1, 0).data(gallery.DUPLICATE_LEVEL_ROLE) is None
+    assert model.index(2, 0).data(gallery.DUPLICATE_LEVEL_ROLE) == "S3"
+
+
+def test_set_records_clears_stale_duplicate_levels(records):
+    model = MediaGridModel()
+    model.set_records(records)
+    model.set_duplicate_levels({str(records[0].media_id): "S3"})
+
+    # A fresh scan produces new records with new media ids; the stale signal
+    # must not leak onto them.
+    model.set_records((_record(name="fresh.dat"), _record(name="fresh2.dat")))
+
+    assert model.index(0, 0).data(gallery.DUPLICATE_LEVEL_ROLE) is None
+    assert model.index(1, 0).data(gallery.DUPLICATE_LEVEL_ROLE) is None
+
+
+def test_delegate_paints_duplicate_cells_without_error(records):
+    """The three levels and the plain cell all paint cleanly offscreen."""
+    from PySide6.QtGui import QImage, QPainter
+    from PySide6.QtWidgets import QApplication
+
+    model = MediaGridModel()
+    model.set_records(records)
+    model.set_duplicate_levels(
+        {str(r.media_id): level for r, level in zip(records, ("S1", "S2", "S3"), strict=True)}
+    )
+    delegate = MediaCellDelegate()
+    image = QImage(_CELL_SIZE, QImage.Format.Format_ARGB32_Premultiplied)
+    painter = QPainter(image)
+
+    for row in range(model.rowCount()):
+        option = QStyleOptionViewItem()
+        option.rect = QRect(0, 0, _CELL_SIZE.width(), _CELL_SIZE.height())
+        option.palette = QApplication.palette()
+        delegate.paint(painter, option, model.index(row, 0))  # must not raise
+
+    painter.end()

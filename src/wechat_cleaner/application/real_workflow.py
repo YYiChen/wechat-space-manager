@@ -313,15 +313,20 @@ class RealReadOnlySession:
         *,
         limit: int | None = None,
         progress: Callable[[int], None] | None = None,
+        subpath: str | None = None,
     ) -> tuple[MediaRecord, ...]:
         """Media records from a read-only scan of the account directory.
 
         Records are deliberately ``UNMAPPED``: without a database mapping pass
         they must never be eligible for cleanup.  ``progress`` is forwarded to
         the scanner and receives the running file count during the scan.
+
+        ``subpath`` optionally focuses the scan on one directory below the
+        account root (folder-focus scan); ``None`` keeps the full-account walk.
+        Paths, types and the UNMAPPED semantics are identical in both modes.
         """
         try:
-            result = scan_account(self.account_root, progress=progress)
+            result = scan_account(self.account_root, progress=progress, subpath=subpath)
         except ScannerError as exc:
             raise DecoderFailure(exc.code, "the account directory could not be scanned") from exc
 

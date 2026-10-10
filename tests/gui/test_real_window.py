@@ -24,7 +24,12 @@ from wechat_cleaner.domain.contracts import (
     MediaType,
 )
 from wechat_cleaner.gui import real_window as real_window_module
-from wechat_cleaner.gui.gallery import THUMB_READY, THUMB_STATE_ROLE, decode_supported
+from wechat_cleaner.gui.gallery import (
+    DUPLICATE_LEVEL_ROLE,
+    THUMB_READY,
+    THUMB_STATE_ROLE,
+    decode_supported,
+)
 from wechat_cleaner.gui.real_session import FakeRealSessionFacade
 from wechat_cleaner.gui.real_window import RealReadOnlyWindow
 
@@ -588,11 +593,11 @@ def test_scan_progress_reports_running_file_counts(qtbot, records, monkeypatch):
     class ProgressFake(FakeRealSessionFacade):
         """Calls the progress callback like the real scanner would."""
 
-        def load_records(self, limit=None, progress=None):
+        def load_records(self, limit=None, progress=None, subpath=None):
             if progress is not None:
                 progress(1)
                 progress(3)
-            return super().load_records(limit, None)
+            return super().load_records(limit, None, subpath)
 
     facade = ProgressFake(records=records)
     window = RealReadOnlyWindow(facade)
@@ -2138,3 +2143,178 @@ def test_window_title_carries_the_release_version(qtbot, records):
 
     assert APP_VERSION.startswith("v")
     assert APP_VERSION in window.windowTitle()
+
+
+# ---------------------------------------------------------------------------
+# Folder focus (ITER-20261008): scan only one directory below the account root.
+# ---------------------------------------------------------------------------
+
+def test_fake_facade_filters_records_by_subpath(records):
+    facade = FakeRealSessionFacade(records=records)
+    everything = facade.load_records()
+    focused = facade.load_records(subpath="msg/attach/8a8b")
+
+    assert facade.last_load_subpath == "msg\\attach\\8a8b"
+    assert focused == everything  # every synthetic record lives under msg/attach/8a8b
+
+    sibling = facade.load_records(subpath="msg/attach/other")
+    assert sibling == ()
+    assert facade.load_records(subpath=None) == everything
+    assert facade.last_load_subpath is None
+
+
+def test_focus_folder_narrows_scan_and_unfocus_restores(qtbot, records, monkeypatch):
+    window = _window(qtbot, records)
+    window.set_data_root("C://synthetic//xwechat_files")
+    window.detect_accounts()
+    window.connect_session()
+    facade = window._facade
+    total = len(window._all_records)
+    assert total == len(records)
+
+    chosen = "C:/demo/wxid_demo_alpha/msg/attach/8a8b"
+    monkeypatch.setattr(
+        real_window_module.QFileDialog,
+        "getExistingDirectory",
+        staticmethod(lambda *args, **kwargs: chosen),
+    )
+    window.focus_button.click()
+
+    assert facade.last_load_subpath == "msg\\attach\\8a8b"
+    assert window._folder_focus == "msg\\attach\\8a8b"
+    assert window.unfocus_button.isEnabled()
+    assert "已聚焦" in window.filter_summary_label.text()
+
+    window.unfocus_button.click()
+    assert facade.last_load_subpath is None
+    assert window._folder_focus is None
+    assert not window.unfocus_button.isEnabled()
+    assert len(window._all_records) == total
+
+
+def test_focus_folder_rejects_paths_outside_account_root(qtbot, records, monkeypatch):
+    window = _window(qtbot, records)
+    window.set_data_root("C://synthetic//xwechat_files")
+    window.detect_accounts()
+    window.connect_session()
+    facade = window._facade
+
+    monkeypatch.setattr(
+        real_window_module.QFileDialog,
+        "getExistingDirectory",
+        staticmethod(lambda *args, **kwargs: "D:/elsewhere/other"),
+    )
+    window.focus_button.click()
+
+    assert facade.last_load_subpath is None
+    assert window._folder_focus is None
+    assert "聚焦失败" in window.statusBar().currentMessage()
+
+
+def test_focus_dialog_starts_at_account_root(qtbot, records, monkeypatch):
+    window = _window(qtbot, records)
+    window.set_data_root("C://synthetic//xwechat_files")
+    window.detect_accounts()
+    window.connect_session()
+
+    seen: dict[str, str] = {}
+
+    def fake_dialog(_parent, _caption, directory, *_args, **_kwargs):
+        seen["directory"] = directory
+        return ""  # user cancels: no scan, no focus change
+
+    monkeypatch.setattr(
+        real_window_module.QFileDialog,
+        "getExistingDirectory",
+        staticmethod(fake_dialog),
+    )
+    window.focus_button.click()
+
+    assert seen["directory"] == "C:/demo/wxid_demo_alpha"
+    assert window._folder_focus is None
+
+
+def test_focus_summary_names_the_conversation(qtbot, records):
+    facade_records = tuple(records)
+    facade = FakeRealSessionFacade(records=facade_records)
+    facade.session_names["8a8b"] = "张三"
+    window = RealReadOnlyWindow(facade)
+    qtbot.addWidget(window)
+    window.set_data_root("C://synthetic//xwechat_files")
+    window.detect_accounts()
+    window.connect_session()
+
+    window._folder_focus = "msg\\attach\\8a8b"
+    window.apply_filters()
+
+    assert "已聚焦 msg\\attach\\8a8b" in window.filter_summary_label.text()
+    assert "张三" in window.statusBar().currentMessage()
+
+
+# ---------------------------------------------------------------------------
+# Duplicate UI (ITER-20261010): levels into the grid, verify button, summary.
+# ---------------------------------------------------------------------------
+
+
+def _duplicate_records() -> tuple[MediaRecord, ...]:
+    return (
+        _record(MediaType.FILE, 100, "report.pdf"),
+        _record(MediaType.FILE, 100, "report (1).pdf"),
+        _record(MediaType.FILE, 700, "report (2).pdf"),
+        _record(MediaType.FILE, 50, "unique.txt"),
+    )
+
+
+def _dup_window(qtbot):
+    window = _window(qtbot, _duplicate_records())
+    window.set_data_root("C://synthetic//xwechat_files")
+    window.detect_accounts()
+    window.connect_session()
+    return window
+
+
+def test_duplicate_levels_fill_after_connect(qtbot):
+    window = _dup_window(qtbot)
+
+    levels = window._duplicate_levels
+    assert len(levels) == 3  # three same-name members; the unique file stays out
+    assert set(levels.values()) == {"S2", "S1"}
+    assert "重复检测" in window.statusBar().currentMessage()
+    assert "4 个同名组" not in window.statusBar().currentMessage()
+
+
+def test_verify_button_enables_only_for_group_members(qtbot):
+    window = _dup_window(qtbot)
+
+    window.select_rows([3])  # unique.txt
+    assert not window.verify_dup_button.isEnabled()
+
+    window.select_rows([0])  # report.pdf — in the group
+    assert window.verify_dup_button.isEnabled()
+
+
+def test_verify_duplicates_marks_identical_group_red(qtbot):
+    window = _dup_window(qtbot)
+    window.select_rows([0])
+
+    window.verify_dup_button.click()
+
+    # The group has three members (100 B, 100 B, 700 B); the two 100-byte
+    # files hash to the same fake digest → red (S3), the 700-byte one keeps
+    # its honest orange.  Red follows the digest cluster, not the group.
+    # Members are path-sorted: "report (1)", "report (2)", "report.pdf".
+    members = window._duplicate_index.groups[0].members
+    assert window._duplicate_levels[str(members[0].media_id)] == "S3"
+    assert window._duplicate_levels[str(members[1].media_id)] == "S1"
+    assert window._duplicate_levels[str(members[2].media_id)] == "S3"
+    assert window._grid_model.index(0, 0).data(DUPLICATE_LEVEL_ROLE) == "S3"
+    assert "内容完全相同" in window.statusBar().currentMessage()
+    assert "内容完全相同" in window.selection_label.text()
+
+
+def test_verify_does_nothing_without_selection(qtbot):
+    window = _dup_window(qtbot)
+
+    window.verify_dup_button.click()  # disabled button; must not raise or change
+
+    assert all(level != "S3" for level in window._duplicate_levels.values())
