@@ -1,0 +1,35 @@
+# Reproducible Windows Beta build/test environment.
+#
+# Target: Windows 10/11 x64, CPython 3.12.10.
+# Tested environment (logical size 597.0 MiB, 12,421 files):
+#   project-assets/environments/wechat-space-manager-real-readonly-venv-isolated-20260909
+#
+# Fresh environment:
+#   py -3.12 -m venv <venv>
+#   <venv>\Scripts\python.exe -m pip install -r packaging/requirements-build-windows.txt
+#
+# Direct pins are intentional. The executable is built with PyInstaller; the
+# GUI/test/runtime dependencies below are the ones actually exercised by the
+# packaging and consumer checks in docs/build-artifacts.md.
+
+PySide6-Essentials==6.11.2
+shiboken6==6.11.2
+pytest==9.1.1
+pytest-qt==4.5.0
+pyinstaller==6.22.2
+pyinstaller-hooks-contrib==2026.7
+imageio-ffmpeg==0.6.0
+cryptography==50.0.1
+numpy==2.5.3
+Pillow==12.3.0
+pydantic==2.13.5
+platformdirs==4.11.8
+colorama==0.4.6
+
+# Upstream read-only adapter. Pin the revision, not the moving default branch.
+wechatauto-replica @ git+https://github.com/fanyuantaier/wechatauto-replica.git@798989c9b61066c120b59ceba636b557b776ff7f
+
+# wechatauto-replica's metadata also requires: psutil, pyperclip, pywin32,
+# zstandard, winsdk, opencv-python, pyautogui, uiautomation. pip resolves
+# those transitively. Pin them in a generated lock file if bit-for-bit
+# reproducibility is required for an offline build host.

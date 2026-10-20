@@ -42,6 +42,8 @@
 | P4-PRIVATE-ACCEPT-01 | human_operator | ready | P4-REAL-INTEGRATION-01 | R2 | 7 条私有小样本验收由用户执行；AI 已停在就绪点 | F-20260910-131, plan/P4-REAL-ROLLOUT-01.md |
 | P4-REAL-PACKAGE-01 | packaging | in_progress | P4-REAL-INTEGRATION-01, P4-PRIVATE-ACCEPT-01 | R2 | 干净 Windows 环境验证、许可证完整、缓存单根、无删除入口 | F-20260910-151, plan/P4-REAL-PACKAGE-01-windows-beta-package.md |
 
+| P4-STORAGE-01 | packaging | done | P4-REAL-PACKAGE-01 | R1 | 构建登记、保留预览、相对 LATEST、版本 Junction、隔离 staging 已完成；26 个打包测试、ruff、全量 539 passed/1 skipped；隔离构建 20261020T084812Z 通过 verify；真实 dist/build 未删除/搬迁；结果已交回 Space_Clean | F-20261020-001, F-20261020-002, plan/P4-STORAGE-01-build-artifacts.md, docs/build-artifacts.md |
+
 ## 统一集成门禁
 
 1. 目标所有依赖为 `done`。

@@ -30,27 +30,64 @@ import os
 import re
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+PACKAGING_DIR = Path(__file__).resolve().parent
+if str(PACKAGING_DIR) not in sys.path:
+    sys.path.insert(0, str(PACKAGING_DIR))
+
+from build_store import (  # noqa: E402
+    STATUS_BUILD_FAILED,
+    STATUS_SUCCESS,
+    STATUS_VERIFY_FAILED,
+    BuildStore,
+    human_bytes,
+)
+
+REPO_ROOT = PACKAGING_DIR.parent
 SPEC_FILE = REPO_ROOT / "packaging" / "wechat-space-manager.spec"
+APP_NAME = "wechat-space-manager"
 DIST_DIR = REPO_ROOT / "dist"
 BUILD_DIR = REPO_ROOT / "build"
-APP_NAME = "wechat-space-manager"
+BUILD_ID = ""
+ARTIFACT_DIR = DIST_DIR / APP_NAME
+LATEST_MARKER = DIST_DIR / "LATEST.txt"
+STORE = BuildStore(DIST_DIR, BUILD_DIR)
 
-# Each build writes into its own timestamped directory so PyInstaller never has
-# to delete a previous artifact tree.  Bulk deletion is an operation this
-# project keeps under explicit human control; a build helper must not perform
-# one.  ``dist/latest`` is a copy-level pointer refreshed by ``_point_latest``.
+
 def _build_id() -> str:
-    from datetime import UTC, datetime
-
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
-BUILD_ID = _build_id()
-ARTIFACT_DIR = DIST_DIR / f"{APP_NAME}-{BUILD_ID}"
-LATEST_MARKER = DIST_DIR / "LATEST.txt"
+def project_version() -> str:
+    """Read the release version from ``pyproject.toml`` (single source of truth)."""
+    try:
+        text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    except OSError:
+        return "0.0.0"
+    match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text)
+    return match.group(1) if match else "0.0.0"
+
+
+def configure_paths(
+    dist_root: Path | str | None = None,
+    build_root: Path | str | None = None,
+    *,
+    build_id: str | None = None,
+) -> BuildStore:
+    """Point the module at a dist/build pair (used by isolated build tests)."""
+    global DIST_DIR, BUILD_DIR, BUILD_ID, ARTIFACT_DIR, LATEST_MARKER, STORE
+    DIST_DIR = Path(dist_root).resolve() if dist_root else REPO_ROOT / "dist"
+    BUILD_DIR = Path(build_root).resolve() if build_root else REPO_ROOT / "build"
+    BUILD_ID = build_id or _build_id()
+    ARTIFACT_DIR = DIST_DIR / f"{APP_NAME}-{BUILD_ID}"
+    LATEST_MARKER = DIST_DIR / "LATEST.txt"
+    STORE = BuildStore(DIST_DIR, BUILD_DIR)
+    return STORE
+
+
+configure_paths()
 
 # --- safety expectations -----------------------------------------------------
 
@@ -89,9 +126,9 @@ PRIVACY_PATTERNS = (
 )
 
 
-def _run(cmd: list[str], *, cwd: Path) -> int:
+def _run(cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> int:
     print(f"[build] $ {' '.join(cmd)}")
-    completed = subprocess.run(cmd, cwd=str(cwd), check=False)
+    completed = subprocess.run(cmd, cwd=str(cwd), check=False, env=env)
     return completed.returncode
 
 
@@ -104,8 +141,16 @@ def build() -> int:
 
     # Stage the trimmed upstream package first: the spec resolves
     # ``wechatauto`` from this directory rather than the editable install.
+    # The staging root follows BUILD_DIR so an isolated build never writes to
+    # the repository's build/ tree (and two builds cannot share staging).
+    staging_root = BUILD_DIR / "upstream-staging"
     stage_code = _run(
-        [sys.executable, str(REPO_ROOT / "packaging" / "stage_upstream.py")],
+        [
+            sys.executable,
+            str(REPO_ROOT / "packaging" / "stage_upstream.py"),
+            "--staging-root",
+            str(staging_root),
+        ],
         cwd=REPO_ROOT,
     )
     if stage_code != 0:
@@ -126,8 +171,15 @@ def build() -> int:
     ]
     # The spec appends the build id to the output directory name so this run
     # writes a fresh tree instead of replacing (i.e. bulk-deleting) a prior one.
-    env = dict(os.environ, WCSM_BUILD_ID=ARTIFACT_DIR.name)
-    print(f"[build] $ {' '.join(cmd)}  (WCSM_BUILD_ID={ARTIFACT_DIR.name})")
+    env = dict(
+        os.environ,
+        WCSM_BUILD_ID=ARTIFACT_DIR.name,
+        WCSM_STAGING_ROOT=str(staging_root),
+    )
+    print(
+        f"[build] $ {' '.join(cmd)}"
+        f"  (WCSM_BUILD_ID={ARTIFACT_DIR.name}, WCSM_STAGING_ROOT={staging_root})"
+    )
     completed = subprocess.run(cmd, cwd=str(REPO_ROOT), check=False, env=env)
     return completed.returncode
 
@@ -143,7 +195,7 @@ def _data_root(target: Path) -> Path:
     return internal if internal.is_dir() else target
 
 
-def _pyz_module_names() -> list[str]:
+def _pyz_module_names(build_id: str | None = None) -> list[str]:
     """Return the module names inside the built PYZ archive, or [] if absent.
 
     The PYZ archive is where PyInstaller stores pure-Python modules, so any
@@ -152,7 +204,7 @@ def _pyz_module_names() -> list[str]:
     """
     # ``workpath`` is ``build/<build-id>/`` so the PYZ lives one level deeper.
     candidates = [
-        BUILD_DIR / BUILD_ID / APP_NAME / "PYZ-00.pyz",
+        BUILD_DIR / (build_id or BUILD_ID) / APP_NAME / "PYZ-00.pyz",
         BUILD_DIR / APP_NAME / "PYZ-00.pyz",
     ]
     pyz = next((p for p in candidates if p.is_file()), None)
@@ -198,7 +250,18 @@ def verify(target: Path | None = None) -> int:
 
     # 2. Module-level safety: the read-only Beta must not carry a cleanup path,
     #    and must not carry upstream's write-capable surfaces.
-    module_names = _pyz_module_names()
+    manifest = {}
+    manifest_path = artifact / "BUILD-MANIFEST.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            manifest = {}
+    build_id = manifest.get("build_id")
+    if not build_id:
+        prefix = f"{APP_NAME}-"
+        build_id = artifact.name[len(prefix):] if artifact.name.startswith(prefix) else None
+    module_names = _pyz_module_names(build_id)
     if module_names:
         print(f"[verify] PYZ module count: {len(module_names)}")
         for forbidden in FORBIDDEN_MODULES + FORBIDDEN_UPSTREAM_MODULES:
@@ -257,8 +320,8 @@ def verify(target: Path | None = None) -> int:
     return 0
 
 
-def write_manifest() -> None:
-    """Record the source revision next to the artifact for traceability."""
+def write_manifest(version: str) -> dict:
+    """Record the source revision and build metadata next to the artifact."""
     revision = "unknown"
     try:
         revision = subprocess.run(
@@ -271,9 +334,14 @@ def write_manifest() -> None:
     except OSError:
         pass
 
+    built_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     manifest = {
         "app": APP_NAME,
-        "version": "0.1.5",
+        "version": version,
+        "build_id": BUILD_ID,
+        "built_at": built_at,
+        "verified_at": built_at,
+        "status": STATUS_SUCCESS,
         "source_revision": revision,
         "mode": "read-only-beta",
         "cleanup_capability": False,
@@ -287,9 +355,10 @@ def write_manifest() -> None:
     target = ARTIFACT_DIR / "BUILD-MANIFEST.json"
     target.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[build] wrote {target}")
+    return manifest
 
 
-def write_release_root_files() -> None:
+def write_release_root_files(version: str) -> None:
     """Copy the human-readable release files next to the executable.
 
     Beginners never open ``_internal/licenses``: the disclaimer, the license
@@ -304,7 +373,7 @@ def write_release_root_files() -> None:
         print("[build] warning: docs/disclaimer.md missing; skipping release files")
         return
     header = (
-        "微信空间管理器（只读相册版）v0.1.5 —— 使用前必读\n"
+        f"微信空间管理器（只读相册版）v{version} —— 使用前必读\n"
         "（以下内容与仓库 docs/disclaimer.md 一致）\n"
         "========================================\n\n"
     )
@@ -321,11 +390,49 @@ def write_release_root_files() -> None:
     print(f"[build] wrote release root files to {ARTIFACT_DIR}")
 
 
-def _point_latest(target: Path) -> None:
-    """Record which timestamped build is the newest one."""
-    DIST_DIR.mkdir(parents=True, exist_ok=True)
-    LATEST_MARKER.write_text(str(target), encoding="utf-8")
-    print(f"[build] latest build: {target}")
+def _point_latest(target: Path) -> str:
+    """Atomically record the release; called only after verification passed."""
+    value = STORE.write_latest(target)
+    print(f"[build] latest build: {target} (LATEST.txt: {value})")
+    return value
+
+
+def _print_retention(plan: dict, *, as_json: bool = False) -> None:
+    if as_json:
+        print(json.dumps(plan, indent=2, ensure_ascii=False))
+        return
+    policy = plan["policy"]
+    print(
+        "[retention] policy: "
+        f"成功版保留 {policy['keep_successful']} 个｜"
+        f"失败构建保留 {policy['keep_failed_max']} 个 / {policy['keep_failed_days']} 天｜"
+        f"中断构建保留 {policy['keep_started_hours']} 小时｜"
+        f"工作缓存保留 {policy['keep_work_days']} 天｜ZIP 保留 {policy['keep_zips']} 个"
+    )
+    print(f"[retention] current: {plan.get('current') or '（无，LATEST 无效）'}")
+    if plan.get("rollback"):
+        print(f"[retention] rollback: {plan['rollback']}")
+    for item in plan["kept"]:
+        print(
+            f"[retention] keep   [{item['kind']}] {item['path']} "
+            f"({human_bytes(item['logical_bytes'])}) — {item['reason']}"
+        )
+    for item in plan["candidates"]:
+        flag = "可以清理" if item.get("deletable") else "仅登记"
+        print(
+            f"[retention] {flag} [{item['kind']}] {item['path']} "
+            f"({human_bytes(item['logical_bytes'])}) — {item['reason']}"
+        )
+    for item in plan["review"]:
+        print(
+            f"[retention] 待判断 [{item['kind']}] {item['path']} "
+            f"({human_bytes(item['logical_bytes'])}) — {item['reason']}"
+        )
+    totals = plan["totals"]
+    print(
+        f"[retention] candidate total: {totals['candidate_human']}；"
+        f"deletable after review: {totals['deletable_human']}（本次未删除任何文件）"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -340,25 +447,136 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="artifact directory to verify (defaults to the newest build)",
     )
+    parser.add_argument(
+        "--dist-root",
+        default=None,
+        help="override dist/ (isolated build validation)",
+    )
+    parser.add_argument(
+        "--build-root",
+        default=None,
+        help="override build/ (isolated build validation)",
+    )
+    parser.add_argument(
+        "--build-id",
+        default=None,
+        help="override the timestamp build id (isolated build validation)",
+    )
+    parser.add_argument(
+        "--version",
+        default=None,
+        help="override the manifest version (defaults to pyproject.toml)",
+    )
+    parser.add_argument(
+        "--retention-plan",
+        action="store_true",
+        help="classify artifacts/caches and print a cleanup preview (read-only)",
+    )
+    parser.add_argument(
+        "--apply-retention",
+        action="store_true",
+        help="apply the previewed cleanup; requires --yes",
+    )
+    parser.add_argument(
+        "--repair-aliases",
+        action="store_true",
+        help="recreate version junctions whose target disappeared after a dist move",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="confirm --apply-retention (never implied)",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="machine-readable output for --retention-plan",
+    )
     args = parser.parse_args(argv)
 
+    configure_paths(args.dist_root, args.build_root, build_id=args.build_id)
+    version = args.version or project_version()
+
+    if args.retention_plan or args.apply_retention:
+        plan = STORE.plan_retention()
+        _print_retention(plan, as_json=args.json)
+        if not args.apply_retention:
+            return 0
+        if not args.yes:
+            print("[retention] refused: pass --yes together with --apply-retention")
+            return 2
+        results = STORE.apply_retention(plan)
+        removed = [item for item in results if item.get("removed")]
+        kept = [item for item in results if not item.get("removed")]
+        print(
+            f"[retention] applied: removed {len(removed)} item(s), "
+            f"kept {len(kept)} item(s)"
+        )
+        for item in kept:
+            print(f"[retention] kept {item['path']} — {item.get('reason')}")
+        return 0
+
+    if args.repair_aliases:
+        results = STORE.repair_aliases()
+        for item in results:
+            print(
+                f"[alias] {item['status']}: {item['alias']} -> {item['artifact']}"
+                f" ({item['detail']})"
+            )
+        conflicts = [item for item in results if item["status"] in {"conflict", "failed"}]
+        return 1 if conflicts else 0
+
     if not args.verify_only:
+        # Register the attempt before PyInstaller runs: a failed build must be
+        # distinguishable from a successful one even when it leaves a partial
+        # directory behind.
+        STORE.start(BUILD_ID, version, work_dir=BUILD_DIR / BUILD_ID)
         code = build()
         if code != 0:
-            print("[build] PyInstaller failed")
+            STORE.finish(
+                BUILD_ID,
+                STATUS_BUILD_FAILED,
+                version=version,
+                error=f"PyInstaller exited {code}",
+            )
+            print("[build] PyInstaller failed; LATEST.txt unchanged")
             return 1
-        write_manifest()
-        write_release_root_files()
+        write_release_root_files(version)
+        # Verification happens *before* the manifest, version alias and pointer.
+        # A failed verification therefore leaves the previous release current.
+        code = verify()
+        if code != 0:
+            STORE.finish(
+                BUILD_ID,
+                STATUS_VERIFY_FAILED,
+                version=version,
+                error=f"verify exited {code}",
+            )
+            print("[build] verification failed; LATEST.txt unchanged")
+            return code
+        manifest = write_manifest(version)
+        alias = STORE.ensure_version_alias(version, ARTIFACT_DIR)
+        print(
+            f"[build] version alias: {alias.alias.name} -> {alias.status}"
+            f" ({alias.detail})"
+        )
+        STORE.finish(
+            BUILD_ID,
+            STATUS_SUCCESS,
+            version=version,
+            manifest=manifest,
+            alias=alias,
+        )
         _point_latest(ARTIFACT_DIR)
-        return verify()
+        _print_retention(STORE.plan_retention())
+        return 0
 
-    # Verification only: honour an explicit target, else fall back to LATEST.
-    if args.artifact:
-        artifact = Path(args.artifact)
-    elif LATEST_MARKER.is_file():
-        artifact = Path(LATEST_MARKER.read_text(encoding="utf-8").strip())
-    else:
-        artifact = ARTIFACT_DIR
+    # Verification only: honour an explicit target, else resolve LATEST with
+    # legacy absolute paths, the registry, and manifest timestamps.
+    artifact = Path(args.artifact) if args.artifact else STORE.resolve_latest()
+    if artifact is None:
+        print("[verify] no usable artifact found; run `python packaging/build.py` first")
+        return 2
     print(f"[verify] artifact: {artifact}")
     return verify(artifact)
 

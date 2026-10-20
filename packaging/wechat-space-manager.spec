@@ -22,6 +22,7 @@ The output lands in ``dist/wechat-space-manager/`` (git-ignored).
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 # --- repo layout -------------------------------------------------------------
@@ -31,8 +32,12 @@ REPO_ROOT = SPEC_DIR.parent
 SRC_DIR = REPO_ROOT / "src"
 LICENSE_DIR = SPEC_DIR / "licenses"
 APP_ICON = SPEC_DIR / "icons" / "app.ico"
-# ``stage_upstream.py`` writes the trimmed upstream package here.
-STAGING_ROOT = REPO_ROOT / "build" / "upstream-staging"
+# ``stage_upstream.py`` writes the trimmed upstream package here.  The build
+# driver overrides this for isolated builds so a temporary build root never
+# shares staging with the repository ``build/`` tree.
+STAGING_ROOT = Path(
+    os.environ.get("WCSM_STAGING_ROOT", REPO_ROOT / "build" / "upstream-staging")
+).resolve()
 
 # Entry script: a dedicated frozen bootstrap so we never depend on __main__'s
 # argument-parsing quirks inside a bundled executable.

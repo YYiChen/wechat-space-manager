@@ -31,11 +31,17 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+PACKAGING_DIR = Path(__file__).resolve().parent
+if str(PACKAGING_DIR) not in sys.path:
+    sys.path.insert(0, str(PACKAGING_DIR))
+
+from build_store import BuildStore  # noqa: E402
+
+REPO_ROOT = PACKAGING_DIR.parent
 DIST_DIR = REPO_ROOT / "dist"
-LATEST_MARKER = DIST_DIR / "LATEST.txt"
 APP_NAME = "wechat-space-manager"
 
 # Labels that would indicate a write/delete capability reached the UI.
@@ -90,13 +96,9 @@ SANCTIONED_ACTION_LABELS = (
 def resolve_artifact(explicit: str | None) -> Path | None:
     if explicit:
         return Path(explicit)
-    if LATEST_MARKER.is_file():
-        candidate = Path(LATEST_MARKER.read_text(encoding="utf-8").strip())
-        if candidate.is_dir():
-            return candidate
-    # Fall back to the newest timestamped directory.
-    candidates = sorted(p for p in DIST_DIR.glob(f"{APP_NAME}-*") if p.is_dir())
-    return candidates[-1] if candidates else None
+    # Resolves relative LATEST values, legacy absolute paths, the build
+    # registry and manifest timestamps — never directory-name ordering.
+    return BuildStore(DIST_DIR).resolve_latest()
 
 
 def run_self_test(artifact: Path) -> tuple[int, dict]:

@@ -1,5 +1,5 @@
-version: 3
-updated_at: 2026-09-09
+version: 4
+updated_at: 2026-10-20
 status_values: [planned, ready, in_progress, blocked, verification, done]
 targets:
   - id: P0-GOV-01
@@ -298,3 +298,11 @@ targets:
     depends_on: [P4-REAL-INTEGRATION-01, P4-PRIVATE-ACCEPT-01]
     deliverables: [packaging/, tests/packaging/, dist/]
     acceptance: Portable and installer artifacts carry the Apache-2.0 LICENSE, source revision and modification notice, verified on a Python-free clean Windows profile, cache in one app-owned root, no cleanup capability.
+  - id: P4-STORAGE-01
+    title: Build artifact registry, retention and portable release pointer
+    owner: packaging
+    status: done
+    risk: R1
+    depends_on: [P4-REAL-PACKAGE-01]
+    deliverables: [packaging/build_store.py, packaging/build.py, packaging/stage_upstream.py, packaging/wechat-space-manager.spec, packaging/verify_artifact.py, packaging/requirements-build-windows.txt, tests/packaging/test_build_store.py, docs/build-artifacts.md, plan/P4-STORAGE-01-build-artifacts.md]
+    acceptance: Every build is registered with a terminal status; LATEST is written only after verification and resolves relative to dist while accepting legacy absolute paths; version aliases are immutable junctions; retention is preview-only by default and protected by explicit confirmation; moving dist keeps LATEST valid and broken aliases can be repaired; no existing artifact is deleted or moved by this task.

@@ -88,7 +88,7 @@ def locate_upstream_package() -> Path:
     raise SystemExit(f"could not resolve the wechatauto package directory (spec={spec!r})")
 
 
-def stage() -> Path:
+def stage(staging_root: Path | str | None = None) -> Path:
     """Create the trimmed staging package and return its parent directory.
 
     Staging is **idempotent and additive**: existing files are overwritten in
@@ -96,8 +96,9 @@ def stage() -> Path:
     deliberately avoided — it is an operation this project keeps under explicit
     human control, and a build helper has no business performing one.
     """
+    root = Path(staging_root).resolve() if staging_root else STAGING_DIR
     source_pkg = locate_upstream_package()
-    target_pkg = STAGING_DIR / "wechatauto"
+    target_pkg = root / "wechatauto"
     target_pkg.mkdir(parents=True, exist_ok=True)
 
     # Minimal, read-only __init__ (overwrites any previous copy).
@@ -123,39 +124,45 @@ def stage() -> Path:
     )
     for license_path in license_candidates:
         if license_path.is_file():
-            shutil.copy2(license_path, STAGING_DIR / "wechatauto-replica-LICENSE.txt")
+            shutil.copy2(license_path, root / "wechatauto-replica-LICENSE.txt")
             break
 
     print(f"[stage] upstream package: {source_pkg}")
     print(f"[stage] staged {len(copied)} module(s): {', '.join(copied)}")
-    print(f"[stage] staging root: {STAGING_DIR}")
-    return STAGING_DIR
+    print(f"[stage] staging root: {root}")
+    return root
 
 
-def clean() -> None:
+def clean(staging_root: Path | str | None = None) -> None:
     """Remove only the files this script created, one at a time."""
-    target_pkg = STAGING_DIR / "wechatauto"
+    root = Path(staging_root).resolve() if staging_root else STAGING_DIR
+    target_pkg = root / "wechatauto"
     removed = 0
     for name in (*ALLOWED_MODULES, "__init__.py", "py.typed"):
         candidate = target_pkg / name
         if candidate.is_file():
             candidate.unlink()
             removed += 1
-    license_copy = STAGING_DIR / "wechatauto-replica-LICENSE.txt"
+    license_copy = root / "wechatauto-replica-LICENSE.txt"
     if license_copy.is_file():
         license_copy.unlink()
         removed += 1
-    print(f"[stage] removed {removed} staged file(s) from {STAGING_DIR}")
+    print(f"[stage] removed {removed} staged file(s) from {root}")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--clean", action="store_true", help="remove the staging directory")
+    parser.add_argument(
+        "--staging-root",
+        default=str(STAGING_DIR),
+        help="override the staging directory (isolated builds)",
+    )
     args = parser.parse_args(argv)
     if args.clean:
-        clean()
+        clean(args.staging_root)
         return 0
-    stage()
+    stage(args.staging_root)
     return 0
 
 
