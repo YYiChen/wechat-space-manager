@@ -9,8 +9,8 @@
 | 项 | 值 |
 | --- | --- |
 | 名称 | `wechatauto-replica` |
-| 版本 | `1.2.1` |
-| 固定 revision | `798989c9b61066c120b59ceba636b557b776ff7f` |
+| 版本 | `1.3.0.2` |
+| 固定 revision | `fb883c5174d824f84754916c87fe6a7cc1323758` |
 | 许可证 | Apache-2.0（全文见同目录 `wechatauto-replica-LICENSE.txt`） |
 | 上游 | https://github.com/fanyuantaier/wechatauto-replica |
 
@@ -21,6 +21,21 @@
 
 - `wechatauto.db.WeChatDB` —— 只读打开 SQLCipher 4 数据库并提取主密钥与 `cfgDword`；
 - `wechatauto.media.MediaDownloader` —— 解密 V2 容器图片。
+
+打包时只裁剪保留 `db`、`media` 两个模块以及它们导入的 `logger`、`param`
+（见 `packaging/stage_upstream.py` 白名单）；发送、监听、朋友圈、UI 自动化等
+可写能力不进入发布包。
+
+### 版本适配说明（v1.3.0.2）
+
+- 该版本新增微信 4.2.0.53 的只读密钥链 `extract_image_key_seed`
+  （`MGR_SINGLETON_RVA`），并保留 4.1.x–4.2.0.13 的旧链回退；更早的 `1.2.1`
+  在 4.2.0.53 上取不到 `cfgDword`。
+- 上游 `keys.json` 缓存自该版本起用 Windows DPAPI 加密（`dpapi1:` 前缀），并会
+  在用户目录镜像一份。本发布包通过 `WECHATAUTO_KEYS_DIR` 把镜像限制在应用缓存根
+  内，关闭时随缓存一并清除。
+- 上游文件日志（`wechatauto_logs/`，含账号标识与绝对路径）在适配层被关闭，本发布
+  包不落任何上游日志文件。
 
 ### 修改说明（Apache-2.0 第 4(b) 条）
 

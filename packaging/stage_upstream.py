@@ -11,8 +11,9 @@ sending, moments, UIA drivers).  Bundling that would:
   project's core safety stance; and
 * bloat the artifact with dependencies the read-only flow never touches.
 
-This script copies **only** the two modules the project actually imports —
-``db`` and ``media`` — plus a minimal ``__init__.py`` into a staging directory.
+This script copies **only** the modules the read-only flow can reach — ``db``
+and ``media`` plus the ``logger``/``param`` pair they import — and a minimal
+``__init__.py`` into a staging directory.
 The spec then puts that staging root on ``pathex`` so PyInstaller packages a
 trimmed ``wechatauto`` package and still resolves ``wechatauto.db`` /
 ``wechatauto.media`` at runtime.
@@ -39,7 +40,15 @@ STAGING_DIR = REPO_ROOT / "build" / "upstream-staging"
 
 # Only the modules the read-only flow imports.  Keep this list minimal and
 # update it only with a matching safety review.
-ALLOWED_MODULES = ("db.py", "media.py")
+#
+# ``logger.py``/``param.py`` joined the list with upstream v1.3.0.2: ``db.py``
+# now starts with ``from wechatauto.logger import wxlog`` and ``logger.py``
+# imports ``.param``.  Without them the staged package raises ImportError,
+# which the adapter reports as the same opaque DECODER_UNAVAILABLE.
+# ``logger`` is neutralised at runtime (see real_media/keys.py): its file
+# handler would write account identifiers into ``wechatauto_logs/`` next to the
+# executable.
+ALLOWED_MODULES = ("db.py", "media.py", "logger.py", "param.py")
 
 # A permissive __init__ that deliberately does NOT import the automation surface.
 PACKAGE_INIT = '''"""Trimmed upstream package staged for the read-only Beta build.

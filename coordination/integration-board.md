@@ -43,6 +43,7 @@
 | P4-REAL-PACKAGE-01 | packaging | in_progress | P4-REAL-INTEGRATION-01, P4-PRIVATE-ACCEPT-01 | R2 | 干净 Windows 环境验证、许可证完整、缓存单根、无删除入口 | F-20260910-151, plan/P4-REAL-PACKAGE-01-windows-beta-package.md |
 
 | P4-STORAGE-01 | packaging | done | P4-REAL-PACKAGE-01 | R1 | 构建登记、保留预览、相对 LATEST、版本 Junction、隔离 staging 已完成；26 个打包测试、ruff、全量 539 passed/1 skipped；隔离构建 20261020T084812Z 通过 verify；真实 dist/build 未删除/搬迁；结果已交回 Space_Clean | F-20261020-001, F-20261020-002, plan/P4-STORAGE-01-build-artifacts.md, docs/build-artifacts.md |
+| P4-REAL-UPSTREAM-02 | packaging | done | P4-REAL-PACKAGE-01 | R2 | 上游 1.2.1→1.3.0.2：新链与旧链在 4.2.0.13 上返回同一 cfgDword；trimmed staging 补 logger/param；关闭上游文件日志；密钥镜像限制在缓存根；跳过自愈把连接 35.4 s 压到 10.5 s；95 tests passed；v0.1.6 便携包 verify OK + frozen 自检通过 | F-20261126-001, F-20261126-002, F-20261126-003, F-20261126-004, plan/P4-REAL-UPSTREAM-02-upstream-1.3.0.2.md |
 
 ## 统一集成门禁
 

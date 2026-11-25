@@ -37,11 +37,13 @@ def stage_module():
 
 
 def test_stage_only_copies_read_only_modules(stage_module, tmp_path, monkeypatch) -> None:
-    """The staged upstream package must contain only db/media plus a bare init."""
+    """Only the read-only chain (db/media + their logger/param) may be staged."""
     fake_pkg = tmp_path / "source" / "wechatauto"
     fake_pkg.mkdir(parents=True)
     (fake_pkg / "db.py").write_text("# db", encoding="utf-8")
     (fake_pkg / "media.py").write_text("# media", encoding="utf-8")
+    (fake_pkg / "logger.py").write_text("# logger", encoding="utf-8")
+    (fake_pkg / "param.py").write_text("# param", encoding="utf-8")
     (fake_pkg / "sender.py").write_text("# write path", encoding="utf-8")
     (fake_pkg / "moment.py").write_text("# write path", encoding="utf-8")
     (fake_pkg.parent / "LICENSE").write_text("Apache License", encoding="utf-8")
@@ -52,7 +54,7 @@ def test_stage_only_copies_read_only_modules(stage_module, tmp_path, monkeypatch
     root = stage_module.stage()
 
     staged = sorted(p.name for p in (root / "wechatauto").iterdir() if p.is_file())
-    assert staged == ["__init__.py", "db.py", "media.py"]
+    assert staged == ["__init__.py", "db.py", "logger.py", "media.py", "param.py"]
     assert (root / "wechatauto-replica-LICENSE.txt").is_file()
 
 
@@ -65,7 +67,15 @@ def test_staged_init_does_not_import_write_surfaces(stage_module) -> None:
 
 
 def test_stage_module_allowlist_is_minimal(stage_module) -> None:
-    assert set(stage_module.ALLOWED_MODULES) == {"db.py", "media.py"}
+    # v1.3.0.2: db.py imports wechatauto.logger (which imports .param), so the
+    # staging list has to carry that pair as well; nothing else may be added.
+    assert set(stage_module.ALLOWED_MODULES) == {"db.py", "media.py", "logger.py", "param.py"}
+
+
+def test_spec_hiddenimports_cover_upstream_key_chain() -> None:
+    spec = (PACKAGING_DIR / "wechat-space-manager.spec").read_text(encoding="utf-8")
+    for name in ("wechatauto.db", "wechatauto.media", "wechatauto.logger", "wechatauto.param", "colorama"):
+        assert f'"{name}"' in spec, f"spec must bundle {name}"
 
 
 # --- spec policy -------------------------------------------------------------
@@ -91,7 +101,7 @@ def test_license_files_exist() -> None:
     text = notice.read_text(encoding="utf-8")
     # Apache-2.0 obligations must be acknowledged explicitly.
     assert "Apache-2.0" in text
-    assert "798989c9b61066c120b59ceba636b557b776ff7f" in text
+    assert "fb883c5174d824f84754916c87fe6a7cc1323758" in text
 
 
 # --- frozen entry point ------------------------------------------------------

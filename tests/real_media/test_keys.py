@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import os
 
 import pytest
 
 from wechat_cleaner.decoder.formats import DecoderFailure
 from wechat_cleaner.domain.contracts import ContractErrorCode
 from wechat_cleaner.real_media import RealImageKeys, derive_image_keys, validate_aes_key
+from wechat_cleaner.real_media import keys as keys_module
 
 CFG_DWORD = 0x1A2B3C4D
 WXID = "wxid_synthetic_alpha"
@@ -64,3 +66,97 @@ def test_keys_clear_zeroizes_state():
     assert keys.aes_key == ""
     assert keys.xor_key == 0
     assert repr(keys) == "RealImageKeys(aes=***, xor=***)"
+
+
+# --- upstream session construction -------------------------------------------
+
+
+class _HealingFakeDB:
+    """Stand-in for upstream WeChatDB with the 1.3.x self-heal hooks."""
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.keys_dir_at_construction = os.environ.get("WECHATAUTO_KEYS_DIR")
+
+    def _try_other_accounts(self) -> bool:
+        return True
+
+    def _select_account_by_keys(self, candidates) -> bool:
+        return True
+
+    def _all_key_candidates(self):
+        return {b"candidate"}
+
+
+class _BareFakeDB:
+    """Stand-in for an upstream pin without the self-heal hooks."""
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+def _install_fake_upstream(monkeypatch, fake_cls):
+    monkeypatch.setattr(
+        keys_module, "require_upstream", lambda: (fake_cls, object), raising=True
+    )
+
+
+def test_explicit_account_skips_upstream_account_self_heal(tmp_path, monkeypatch):
+    _install_fake_upstream(monkeypatch, _HealingFakeDB)
+
+    session = keys_module.open_source_session(
+        db_root=str(tmp_path / "wx"), workdir=str(tmp_path / "cache"), account=WXID
+    )
+
+    assert isinstance(session, _HealingFakeDB)
+    assert session.kwargs["account"] == WXID
+    assert session._try_other_accounts() is False
+    assert session._select_account_by_keys({b"x"}) is False
+    assert session._all_key_candidates() == set()
+
+
+def test_account_discovery_keeps_full_self_heal(tmp_path, monkeypatch):
+    _install_fake_upstream(monkeypatch, _HealingFakeDB)
+
+    session = keys_module.open_source_session(
+        db_root=str(tmp_path / "wx"), workdir=str(tmp_path / "cache"), account=None
+    )
+
+    assert session._try_other_accounts() is True
+    assert session._all_key_candidates() == {b"candidate"}
+
+
+def test_pinned_class_degrades_when_upstream_lacks_hooks(tmp_path, monkeypatch):
+    _install_fake_upstream(monkeypatch, _BareFakeDB)
+
+    session = keys_module.open_source_session(
+        db_root=str(tmp_path / "wx"), workdir=str(tmp_path / "cache"), account=WXID
+    )
+
+    assert type(session) is _BareFakeDB
+
+
+def test_key_mirror_is_confined_to_the_cache_root(tmp_path, monkeypatch):
+    _install_fake_upstream(monkeypatch, _HealingFakeDB)
+    monkeypatch.delenv("WECHATAUTO_KEYS_DIR", raising=False)
+
+    session = keys_module.open_source_session(
+        db_root=str(tmp_path / "wx"), workdir=str(tmp_path / "cache"), account=WXID
+    )
+
+    mirrored = session.keys_dir_at_construction
+    assert mirrored is not None
+    assert mirrored.startswith(str(tmp_path / "cache"))
+    # Restored afterwards: the caller's environment must not leak the override.
+    assert "WECHATAUTO_KEYS_DIR" not in os.environ
+
+
+def test_key_mirror_override_restores_previous_value(tmp_path, monkeypatch):
+    _install_fake_upstream(monkeypatch, _HealingFakeDB)
+    monkeypatch.setenv("WECHATAUTO_KEYS_DIR", "sentinel-dir")
+
+    keys_module.open_source_session(
+        db_root=str(tmp_path / "wx"), workdir=str(tmp_path / "cache"), account=WXID
+    )
+
+    assert os.environ["WECHATAUTO_KEYS_DIR"] == "sentinel-dir"

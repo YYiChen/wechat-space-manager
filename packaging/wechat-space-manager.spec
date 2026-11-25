@@ -71,6 +71,13 @@ hiddenimports = [
     "wechatauto",
     "wechatauto.db",
     "wechatauto.media",
+    # Upstream v1.3.0.2: wechatauto.db imports wechatauto.logger at module
+    # scope, and logger imports wechatauto.param + colorama.  Missing any of
+    # them makes keys.require_upstream() fail and every connect report
+    # DECODER_UNAVAILABLE.
+    "wechatauto.logger",
+    "wechatauto.param",
+    "colorama",
     # pydantic v2 uses compiled helpers resolved at runtime.
     "pydantic",
     "pydantic_core",

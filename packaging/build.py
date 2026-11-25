@@ -347,8 +347,8 @@ def write_manifest(version: str) -> dict:
         "cleanup_capability": False,
         "upstream": {
             "name": "wechatauto-replica",
-            "version": "1.2.1",
-            "revision": "798989c9b61066c120b59ceba636b557b776ff7f",
+            "version": "1.3.0.2",
+            "revision": "fb883c5174d824f84754916c87fe6a7cc1323758",
             "license": "Apache-2.0",
         },
     }

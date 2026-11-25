@@ -25,10 +25,28 @@ __all__ = ["RealImageKeys", "derive_image_keys", "require_upstream"]
 
 JPEG_LIKE_PREFIXES = (b"\xff\xd8\xff", b"\x89PNG", b"GIF87a", b"GIF89a", b"BM")
 
+# Upstream 1.3.x mirrors its key cache into this directory when it can find one.
+_KEYS_DIR_ENV = "WECHATAUTO_KEYS_DIR"
+
+# Upstream 1.3.x account self-heal hooks (see _account_pinned_session_class).
+_HEAL_HOOKS = ("_try_other_accounts", "_select_account_by_keys", "_all_key_candidates")
+_PINNED_SESSION_CLASSES: dict[type, type] = {}
+
 
 def require_upstream() -> tuple[Any, Any]:
-    """Import the optional upstream backend lazily; degrade cleanly if absent."""
+    """Import the optional upstream backend lazily; degrade cleanly if absent.
+
+    Upstream 1.3.x brings two side effects this project must not inherit:
+
+    * ``wechatauto.logger`` creates ``wechatauto_logs/app_<date>.log`` in the
+      current working directory on the first log call, and its records carry
+      account identifiers and absolute database paths — R2 forbids private data
+      in logs, so file logging is switched off before the first import;
+    * ``WeChatDB._save_keys`` mirrors the key cache into a user-level directory
+      (see :func:`open_source_session`, which redirects it into the cache root).
+    """
     try:
+        from wechatauto.param import WxParam  # noqa: PLC0415
         from wechatauto.db import WeChatDB  # noqa: PLC0415
         from wechatauto.media import MediaDownloader  # noqa: PLC0415
     except ImportError as exc:  # pragma: no cover - depends on environment
@@ -36,6 +54,7 @@ def require_upstream() -> tuple[Any, Any]:
             ContractErrorCode.DECODER_UNAVAILABLE,
             "the optional real-media backend is not installed",
         ) from exc
+    WxParam.ENABLE_FILE_LOGGER = False
     return WeChatDB, MediaDownloader
 
 
@@ -48,6 +67,45 @@ def derive_image_keys(cfg_dword: int, wxid: str) -> tuple[str, int]:
         raise DecoderFailure(ContractErrorCode.DECODER_UNAVAILABLE, "cfgDword is unavailable")
     aes_key = hashlib.md5(f"{cfg_dword}{wxid}".encode()).hexdigest()[:16]
     return aes_key, cfg_dword & 0xFF
+
+
+def _account_pinned_session_class(base: type) -> type:
+    """Return a ``WeChatDB`` variant that skips upstream's account self-heal.
+
+    Upstream 1.3.x re-derives keys for *every* account directory whenever a
+    single database stays keyless.  Real accounts always carry structurally
+    keyless databases (``biz``, ``fmessage_new``, ``wcfinder``, ``websearch`` …),
+    so the heal runs on every construction: measured on a 35-database account,
+    35.4 s per connect of which 26.2 s was 8252 PBKDF2 derivations, versus 10.0 s
+    with the heal disabled.
+
+    The heal exists to recover from a *wrong account guess*.  This project
+    always passes the account directory the user picked and validates every
+    database by page-1 HMAC, so with an explicit account the search only costs
+    latency.  Unknown upstream pins keep the plain class, and the override is a
+    no-op if any hook disappears.
+    """
+    cached = _PINNED_SESSION_CLASSES.get(base)
+    if cached is not None:
+        return cached
+    if not all(hasattr(base, hook) for hook in _HEAL_HOOKS):
+        _PINNED_SESSION_CLASSES[base] = base
+        return base
+
+    class AccountPinned(base):  # type: ignore[misc, valid-type]
+        """WeChatDB that trusts the caller's account instead of guessing."""
+
+        def _try_other_accounts(self) -> bool:
+            return False
+
+        def _select_account_by_keys(self, candidates: Any) -> bool:
+            return False
+
+        def _all_key_candidates(self) -> set[Any]:
+            return set()
+
+    _PINNED_SESSION_CLASSES[base] = AccountPinned
+    return AccountPinned
 
 
 def validate_aes_key(aes_key: str, probe_ciphertext: bytes) -> bool:
@@ -110,10 +168,20 @@ def open_source_session(
     """
     WeChatDB, _ = require_upstream()
     os.makedirs(workdir, exist_ok=True)
+    session_class = WeChatDB if account is None else _account_pinned_session_class(WeChatDB)
+    # 1.3.x mirrors keys.json into %LOCALAPPDATA%\wechatauto_keys unless this is
+    # set.  Keep every cache artifact inside the app-owned root so "clear cache"
+    # really clears it, and restore the caller's environment afterwards.
+    previous_keys_dir = os.environ.get(_KEYS_DIR_ENV)
+    os.environ[_KEYS_DIR_ENV] = os.path.join(workdir, "wechatauto-keys")
     sink = io.StringIO()
     try:
         with contextlib.redirect_stdout(sink):
-            return WeChatDB(db_dir=db_root, workdir=workdir, account=account)
+            return session_class(db_dir=db_root, workdir=workdir, account=account)
     finally:
+        if previous_keys_dir is None:
+            os.environ.pop(_KEYS_DIR_ENV, None)
+        else:
+            os.environ[_KEYS_DIR_ENV] = previous_keys_dir
         if log_sink is not None:
             log_sink(sink.getvalue())
